@@ -61,12 +61,30 @@
 
     function sendSignalRightward() {
       
-      client.publish('ukraine/esp32/Wi-Fi_module', 'rightward');
-      console.log("Сигнал надіслано в хмару");
+      
+      
+
+        if(marker_d == true){
+
+            client.publish('ukraine/esp32/Wi-Fi_module', 'rightward_go');
+            console.log("Сигнал їхати в право надіслано в хмару");
+
+        }else if(marker_d == false){
+
+            client.publish('ukraine/esp32/Wi-Fi_module', 'rightward_stop');
+            console.log("Сигнал зупинитися в право надіслано в хмару");
+
+        }else{
+
+            console.log("Щось пішло не так в sendSignalRightward");
+
+        }
+
     }
 
 
     const button_a = document.getElementById("A");
+    let marker_a = false;
 
     button_a.addEventListener("click", sendSignalLeftward);
 
@@ -113,18 +131,32 @@
 
 
     const button_d = document.getElementById("D");
+    let marker_d = false;
 
     button_d.addEventListener("click", sendSignalRightward);
 
     document.addEventListener("keydown", function(event){
-        if (event.repeat) return;
+        if (event.repeat && event.key == "D" || event.key == "d"){
 
-        if(event.key == "D" || event.key == "d"){
+            marker_d = true;
             event.preventDefault();
             button_d.style.background = "#ddd";
-            sendSignalRightward();
+            sendSignalRightward(marker_d);
 
+        }else{
+
+            marker_d = false;
+            event.preventDefault();
+            button_d.style.background = "#FFFFFF";
+            sendSignalRightward(marker_d);
+
+            
         }
+
+        
+            
+
+        
     });
 
 </script>
