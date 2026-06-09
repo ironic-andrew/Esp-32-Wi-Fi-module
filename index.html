@@ -69,14 +69,14 @@
 
     const button_s = document.getElementById("S");
 
-    button_a.addEventListener("click", sendSignalBackward);
+    button_s.addEventListener("click", sendSignalBackward);
 
     document.addEventListener("keydown", function(event){
         if (event.repeat) return;
 
         if(event.key == "S" || event.key == "s"){
             event.preventDefault();
-            button_a.style.background = "#ddd";
+            button_s.style.background = "#ddd";
             sendSignalBackward();
 
         }
