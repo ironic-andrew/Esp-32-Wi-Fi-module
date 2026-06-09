@@ -32,6 +32,45 @@
 
 
 
+<script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+<script>
+    
+    const client = mqtt.connect('wss://broker.hivemq.com:8000/mqtt');
+
+  client.on('connect', () => {
+      console.log('Підключено до MQTT брокера!');
+  });
+
+  function sendSignal() {
+      
+      client.publish('ukraine/esp32/Wi-Fi_module', 'toggle');
+      console.log("Сигнал надіслано в хмару");
+  }
+
+    const button_a = document.getElementById("A");
+
+    function sendSignal(){
+
+
+
+    }
+
+    button_a.addEventListener("click", sendSignal);
+
+    document.addEventListener("keydown", function(event)){
+        if(event.key == "A"){
+            event.preventDefault();
+            button_a.style.background = "#ddd";
+            sendSignal();
+
+        }
+
+
+    }
+
+
+
+</script>
 
 </body>
 </html>
