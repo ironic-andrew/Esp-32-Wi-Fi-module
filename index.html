@@ -54,7 +54,7 @@
 
     const button_a = document.getElementById("A");
 
-    button_a.addEventListener("click", sendSignal);
+    button_a.addEventListener("click", sendSignalForward);
 
     document.addEventListener("keydown", function(event){
         if (event.repeat) return;
@@ -69,7 +69,7 @@
 
     const button_s = document.getElementById("S");
 
-    button_a.addEventListener("click", sendSignal);
+    button_a.addEventListener("click", sendSignalBackward);
 
     document.addEventListener("keydown", function(event){
         if (event.repeat) return;
