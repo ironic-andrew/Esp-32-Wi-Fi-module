@@ -31,7 +31,7 @@
 <button id = "D" type="button" class = "buttom1">D</button>
 
 
-
+<!-- Ініціалізація брокера   -->
 <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
 <script>
     
@@ -41,20 +41,34 @@
       console.log('Підключено до MQTT брокера!');
   });
 
-  function sendSignalForward() {
+    function sendSignalLeftward() {
+      
+      client.publish('ukraine/esp32/Wi-Fi_module', 'leftward');
+      console.log("Сигнал надіслано в хмару");
+    }
+
+    function sendSignalForward() {
       
       client.publish('ukraine/esp32/Wi-Fi_module', 'forward');
       console.log("Сигнал надіслано в хмару");
-  }
-  function sendSignalBackward() {
+    }
+
+    function sendSignalBackward() {
       
       client.publish('ukraine/esp32/Wi-Fi_module', 'backward');
       console.log("Сигнал надіслано в хмару");
-  }
+    }
+
+    function sendSignalRightward() {
+      
+      client.publish('ukraine/esp32/Wi-Fi_module', 'rightward');
+      console.log("Сигнал надіслано в хмару");
+    }
+
 
     const button_a = document.getElementById("A");
 
-    button_a.addEventListener("click", sendSignalForward);
+    button_a.addEventListener("click", sendSignalLeftward);
 
     document.addEventListener("keydown", function(event){
         if (event.repeat) return;
@@ -62,6 +76,21 @@
         if(event.key == "A" || event.key == "a"){
             event.preventDefault();
             button_a.style.background = "#ddd";
+            sendSignalLeftward();
+
+        }
+    });
+
+    const button_w = document.getElementById("W");
+
+    button_w.addEventListener("click", sendSignalForward);
+
+    document.addEventListener("keydown", function(event){
+        if (event.repeat) return;
+
+        if(event.key == "W" || event.key == "w"){
+            event.preventDefault();
+            button_w.style.background = "#ddd";
             sendSignalForward();
 
         }
@@ -83,6 +112,20 @@
     });
 
 
+    const button_d = document.getElementById("D");
+
+    button_d.addEventListener("click", sendSignalRightward);
+
+    document.addEventListener("keydown", function(event){
+        if (event.repeat) return;
+
+        if(event.key == "D" || event.key == "d"){
+            event.preventDefault();
+            button_d.style.background = "#ddd";
+            sendSignalRightward();
+
+        }
+    });
 
 </script>
 
