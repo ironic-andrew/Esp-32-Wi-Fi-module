@@ -52,6 +52,8 @@
     button_a.addEventListener("click", sendSignal);
 
     document.addEventListener("keydown", function(event){
+        if (event.repeat) return;
+
         if(event.key == "A" || event.key == "a"){
             event.preventDefault();
             button_a.style.background = "#ddd";
