@@ -41,9 +41,14 @@
       console.log('Підключено до MQTT брокера!');
   });
 
-  function sendSignal() {
+  function sendSignalForward() {
       
-      client.publish('ukraine/esp32/Wi-Fi_module', 'toggle');
+      client.publish('ukraine/esp32/Wi-Fi_module', 'forward');
+      console.log("Сигнал надіслано в хмару");
+  }
+  function sendSignalBackward() {
+      
+      client.publish('ukraine/esp32/Wi-Fi_module', 'backward');
       console.log("Сигнал надіслано в хмару");
   }
 
@@ -57,11 +62,24 @@
         if(event.key == "A" || event.key == "a"){
             event.preventDefault();
             button_a.style.background = "#ddd";
-            sendSignal();
+            sendSignalForward();
 
         }
+    });
 
+    const button_s = document.getElementById("S");
 
+    button_a.addEventListener("click", sendSignal);
+
+    document.addEventListener("keydown", function(event){
+        if (event.repeat) return;
+
+        if(event.key == "S" || event.key == "s"){
+            event.preventDefault();
+            button_a.style.background = "#ddd";
+            sendSignalBackward();
+
+        }
     });
 
 
