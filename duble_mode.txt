@@ -1,0 +1,484 @@
+#include <WiFi.h>
+#include <PubSubClient.h>
+
+#include <Arduino.h>
+#include <U8g2lib.h>
+#include <Wire.h>
+
+U8X8_SH1106_128X64_NONAME_HW_I2C u8x8(/* reset=*/ -1, /* clock=*/ 9, /* data=*/ 8);
+
+bool mode = false;
+
+// --- motors initialization --- Motors
+const int8_t motors[4] = {38, 37, 40, 39};
+/*
+38 - left forward 
+37 - left backward
+40 - right forward
+39 - right backward
+*/
+
+// ---- mode 1 ---- 
+
+const char* ssid = "OpenSpace322";
+const char* password = "LAN322LAN";
+const char* mqtt_server = "broker.emqx.io";
+const char* topic = "ukraine/esp32/Wi-Fi_module";
+
+// ---- mode 2 ----
+// --- coefficient ---
+float Kp = 0.15;//0.15
+float Kd = 0.8;//0.8
+float Ki = 0;
+
+// --- formula elements ---
+long integral = 0;
+short lastError = 0;
+uint8_t baseSpeed = 60;
+
+short leftSpeed = 0;
+short rightSpeed = 0;
+
+// --- sensors initialization ---
+const int8_t sensors[8] = {4, 5, 6, 7, 10, 11, 13, 12};//pin order is reverse 
+
+// --- max/min --- calibrate ---
+short sensor_max[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+short sensor_min[8] = {10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000};
+
+// --- weight --- sensorsRead ---
+const short weights[8] = {-4000, -3000, -2000, -1000, 1000, 2000, 3000, 4000};
+
+
+
+// ---- mode1 ----
+
+WiFiClient espClient;
+PubSubClient client(espClient);
+
+void callback(char* topic, byte* payload, unsigned int length) {
+  Serial.print("Зловлено сигнал з топіку: ");
+  Serial.println(topic);
+
+  String message = "";
+  for (int i = 0; i < length; i++) { 
+    message += (char)payload[i]; 
+  }
+  
+  Serial.print("Текст повідомлення: ");
+  Serial.println(message);
+
+  if(message == "mode1"){
+
+    mode = false;
+    Serial.println("Вибрано <mode1>");
+
+  }else if(message == "mode2"){
+
+    mode = true;
+    Serial.println("Вибрано <mode2>");
+
+  }
+
+  if(message == "mode1"){
+
+    mode = false;
+    Serial.println("Обраний <mode1>");
+
+  }else if(message == "mode2"){
+
+    mode = true;
+    Serial.println("Обраний <mode2>");
+
+  }
+  
+  if(message == "forward_left"){
+
+    Serial.println("Команда <forward_left> успішно оброблена!"); 
+    Motors(50, 0, 80, 0);
+
+  }else if(message == "forward_right"){
+
+    Serial.println("Команда <forward_right> успішно оброблена!"); 
+    Motors(80, 0, 50, 0);
+
+  }else if(message == "backward_left"){
+
+    Serial.println("Команда <backward_left> успішно оброблена!"); 
+    Motors(0, 50, 0, 80);
+
+  }else if(message == "backward_right"){
+
+    Serial.println("Команда <backward_right> успішно оброблена!"); 
+    Motors(0, 80, 0, 50);
+
+  }else if(message == "forward"){
+
+    Serial.println("Команда <forward> успішно оброблена!"); 
+    Motors(80, 0, 80, 0);
+
+  }else if(message == "backward"){
+
+    Serial.println("Команда <backward> успішно оброблена!"); 
+    Motors(0, 80, 0, 80);
+
+  }else if(message == "left"){
+
+    Serial.println("Команда <left> успішно оброблена!"); 
+    Motors(0, 00, 80, 0);
+
+  }else if(message == "right"){
+
+    Serial.println("Команда <right> успішно оброблена!"); 
+    Motors(80, 0, 0, 0);
+
+  }else{
+
+    Serial.println("Команда <all_stop> успішно оброблена!"); 
+    Motors(0, 0, 0, 0);
+
+  }
+}
+
+void reconnect() {
+  while (!client.connected()) {
+    Serial.print("Спроба підключення до MQTT брокера... ");
+    u8x8.drawString(0, 4, "Try conection to");
+    u8x8.drawString(3, 5, "Broker");
+    
+    String clientId = "ESP32_Client_" + String(random(0, 10000)); 
+    
+    if (client.connect(clientId.c_str())) {
+      u8x8.clear(); 
+      Serial.println("[УСПІШНО]");
+      client.subscribe(topic); 
+      Serial.print("Підписалися на топік: ");
+      Serial.println(topic);
+      u8x8.drawString(1, 4, "Ready to work!");
+    } else {
+      u8x8.clear();
+      Serial.print("[ПОМИЛКА], код помилки = ");
+      Serial.print(client.state());
+      Serial.println(", повтор через 5 секунд...");
+      u8x8.drawString(0, 4, "Waiting connection...");
+      delay(5000);
+      u8x8.clear();
+    }
+  }
+}
+
+void connection(){
+
+  Serial.print("Підключення до Wi-Fi: ");
+  Serial.println(ssid);
+  WiFi.begin(ssid, password);
+  
+  while (WiFi.status() != WL_CONNECTED) { 
+    delay(500); 
+    Serial.print("."); 
+  }
+  
+  Serial.println("\n[Wi-Fi ПІДКЛЮЧЕНО!]");
+  Serial.print("IP адреса плати: ");
+  Serial.println(WiFi.localIP());
+  
+  client.setServer(mqtt_server, 1883);
+  client.setCallback(callback);
+
+}
+
+void Motors(int moto1_forward, int moto1_backward, int moto2_forward, int moto2_backward){
+
+  analogWrite(motors[0], moto1_forward);
+  analogWrite(motors[1], moto1_backward);
+  analogWrite(motors[2], moto2_forward);
+  analogWrite(motors[3], moto2_backward);
+
+}
+
+
+void setup() {
+  Serial.begin(115200);
+
+  // -- motors initialization --
+  pinMode(motors[0], OUTPUT);
+  pinMode(motors[1], OUTPUT);
+  pinMode(motors[2], OUTPUT);
+  pinMode(motors[3], OUTPUT);
+
+  delay(1000); 
+  Serial.println("\n--- Старт програми ---");
+
+  u8x8.begin();
+  u8x8.setFlipMode(1);
+  u8x8.setPowerSave(0); 
+
+  u8x8.setFont(u8x8_font_chroma48medium8_r);
+  u8x8.clear();
+
+  connection();
+
+  
+}
+
+void loop() {
+
+  if(mode){
+    u8x8.clear();
+
+    if(!mode){
+
+     if (!client.connected()) { 
+    reconnect(); 
+  
+    }
+ 
+    client.loop(); 
+
+    }
+
+    short position = sensorsRead();
+    short error = position;
+
+    short P = error;
+    integral += error;
+    short D = error - lastError;
+
+    // -- main formula --
+    short steering = (Kp * P) + (Ki * integral) + (Kd * D);
+
+    lastError = error;
+
+    leftSpeed = baseSpeed + steering;
+    rightSpeed = baseSpeed - steering;
+
+    // -- transfer date to Motors --
+    Motors(leftSpeed, rightSpeed);  
+
+
+  }else{
+
+    if (!client.connected()) { 
+    reconnect(); 
+  
+    }
+ 
+    client.loop(); 
+
+  }
+
+
+
+
+
+}
+
+
+// --- Calibation ---
+void calibrate() {
+  long startTime = millis();
+  short timer = 500;
+  int8_t i = 1;
+  /*
+  u8x8.clear();
+  u8x8.setCursor(1, 4);
+  u8x8.print("Search road!");
+  */
+
+  // -- transfer date to Motors --
+  Motors(80, -80); 
+  
+  u8x8.drawString(3, 3, "Calibration...");
+
+  int8_t current_step = 1;
+
+  // -- calibration loop -- 
+  while(millis() - startTime < 3000) {
+
+    long current_time = millis() - startTime;
+
+    // - print 1,2,3 on display -
+    if(current_time < 1000 && current_step == 1){
+
+      u8x8.drawString(8, 5, "3");
+      current_step = 2;
+
+    }else if(current_time >= 1000 && current_step == 2){
+
+      u8x8.drawString(8, 5, "2");
+      current_step = 3;
+
+    }else if(current_time >= 2000 && current_step == 3){
+
+      u8x8.drawString(8, 5, "1");
+      current_step = 4;
+
+    }
+    
+    // - get min/max -
+    for(int8_t i = 0; i < 8; ++i) {
+      short current_val = analogRead(sensors[i]);
+
+      if(current_val < sensor_min[i]) { sensor_min[i] = current_val; }
+      if(current_val > sensor_max[i]) { sensor_max[i] = current_val; }
+    }
+  } 
+
+  Motors(0, 0); 
+  delay(100);
+
+  u8x8.clearLine(5);
+  u8x8.clearLine(3);
+  u8x8.drawString(3, 3, "Complited!");
+
+  delay(700);
+  u8x8.clearLine(3);
+
+  /*
+  u8x8.clear();
+  u8x8.setCursor(1, 4);
+  u8x8.print("Search road!");
+  */
+}
+
+// --- Sensors Read ---
+int sensorsRead(){
+    short sensors_read[8];
+
+    long sum = 0;
+    long count = 0;
+
+    short raw = 0;
+    short calibrated = 0;
+
+    short position = 0;
+
+    /*
+    u8x8.clear();
+    u8x8.setCursor(1, 4);
+    u8x8.print("Read sensors!");
+    */
+
+    // -- main loop -- 
+    for(int i = 0; i < 8; ++i){
+
+      raw = analogRead(sensors[i]);
+
+      // - get finally date -
+      calibrated = map(raw, sensor_min[i], sensor_max[i], 0, 1000); 
+
+      calibrated = constrain(calibrated, 0, 1000); 
+
+
+      // - calibrat some sensors - 
+      if(i == 7){
+
+        calibrated = calibrated - 100;
+
+      }
+
+      if(i == 5){
+
+        calibrated = calibrated + 70;
+
+      }
+
+      if (calibrated < 200) { 
+        calibrated = 0; 
+      }
+
+      sum += (long)calibrated * weights[i];
+
+      count += calibrated;
+
+      sensors_read[i] = calibrated;
+
+      
+    }
+
+    
+    // -- print on display active/pasive sensors --
+    int8_t j = 1;
+    for(int8_t i = 7; i >= 0; --i){
+      j += 1;
+
+      if(sensors_read[i] >= 850){
+
+        u8x8.drawString(j + 2, 4, "+");
+        /*
+        u8x8.drawString(j + 2, 3, "+");
+        u8x8.drawString(j + 2, 4, "+");
+        u8x8.drawString(j + 2, 5, "+");
+        u8x8.drawString(j + 2, 6, "+");
+        */
+
+      }else{
+
+        u8x8.drawString(j + 2, 4, "-");
+        /*
+        u8x8.drawString(j + 2, 3, "-");
+        u8x8.drawString(j + 2, 4, "-");
+        u8x8.drawString(j + 2, 5, "-");
+        u8x8.drawString(j + 2, 6, "-");
+        */
+
+      }
+
+    } 
+    
+    
+    if (count == 0) {
+      return lastError; 
+    }
+
+    position = sum / count;  
+
+    /*
+    u8x8.clear();
+    u8x8.setCursor(1, 4);
+    u8x8.print("Read complited!");
+    */
+
+    return position;
+}
+
+// --- apply Motors ---
+void Motors(short leftSpeed, short rightSpeed){
+
+  /*
+  u8x8.clear();
+  u8x8.setCursor(0, 4);
+  u8x8.print("Set motor configuration!");
+  */
+
+  leftSpeed = constrain(leftSpeed, -255, 255);
+  rightSpeed = constrain(rightSpeed, -255, 255);
+
+  // -- left --
+  if(leftSpeed >= 0){
+
+    analogWrite(motors[0], leftSpeed);
+    analogWrite(motors[1], 0);
+
+  }else{
+
+    analogWrite(motors[0], 0);
+    analogWrite(motors[1], abs(leftSpeed));
+
+  }
+
+
+  // -- right --
+  if(rightSpeed >= 0){
+
+    analogWrite(motors[2], rightSpeed);
+    analogWrite(motors[3], 0);
+
+  }else{
+
+    analogWrite(motors[2], 0);
+    analogWrite(motors[3], abs(rightSpeed));
+
+  }
+}
+
