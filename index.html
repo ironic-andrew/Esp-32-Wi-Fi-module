@@ -133,7 +133,7 @@
     const button_d = document.getElementById("D");
     let marker_d = false;
 
-    button_d.addEventListener("click", sendSignalRightward);
+    button_d.addEventListener("click", () => sendSignalRightward(true));
 
     document.addEventListener("keydown", function(event){
         
@@ -150,7 +150,6 @@
     });
     
     document.addEventListener("keyup", function(event){
-    
     
     if (event.key.toLowerCase() !== "d") return;
 
