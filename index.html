@@ -139,9 +139,7 @@
         
     if (event.key.toLowerCase() !== "d") return;
 
-    if (event.type === "keydown") {
-        
-        if (marker_d === true) return; 
+    if (marker_d) return;
 
         marker_d = true;
         event.preventDefault();
@@ -149,16 +147,25 @@
         sendSignalRightward(marker_d); 
         console.log("Кнопку затиснули!");
 
-    } else if (event.type === "keyup") {
+    });
+    
+    document.addEventListener("keyup", function(event){
+    
+    
+    if (event.key.toLowerCase() !== "d") return;
+
         marker_d = false;
         event.preventDefault();
         button_d.style.background = "#FFFFFF";
         sendSignalRightward(marker_d); 
         console.log("Кнопку відпустили!");
-    }
+
 
     });
-             
+
+          
+    
+
    
 
 </script>
