@@ -136,60 +136,30 @@
     button_d.addEventListener("click", sendSignalRightward);
 
     document.addEventListener("keydown", function(event){
-        if (event.repeat && event.key == "D" || event.key == "d"){
-
-            marker_d = true;
-            event.preventDefault();
-            button_d.style.background = "#ddd";
-            sendSignalRightward(marker_d);
-
-        }else if(event.type === 'keyup'){
-
-            marker_d = false;
-            event.preventDefault();
-            button_d.style.background = "#FFFFFF";
-            sendSignalRightward(marker_d);
-
-            
-        }
-
-     /*
-     
-     let marker_d = false; // Початковий стан — кнопка віджата
-
-function handleDKey(event) {
-    // Перевіряємо, чи це саме клавіша D (ігноруючи регістр)
+        
     if (event.key.toLowerCase() !== "d") return;
 
     if (event.type === "keydown") {
-        // Якщо кнопка вже була затиснута, ігноруємо системні повтори браузера
+        
         if (marker_d === true) return; 
 
         marker_d = true;
         event.preventDefault();
         button_d.style.background = "#ddd";
-        sendSignalRightward(marker_d); // Надсилаємо true ОДИН РАЗ при натисканні
+        sendSignalRightward(marker_d); 
         console.log("Кнопку затиснули!");
 
     } else if (event.type === "keyup") {
         marker_d = false;
         event.preventDefault();
         button_d.style.background = "#FFFFFF";
-        sendSignalRightward(marker_d); // Надсилаємо false ОДИН РАЗ при відпусканні
+        sendSignalRightward(marker_d); 
         console.log("Кнопку відпустили!");
     }
-}
 
-// Обов'язково додаємо ОБИДВА слухачі подій
-document.addEventListener("keydown", handleDKey);
-document.addEventListener("keyup", handleDKey);
-
-
-     */   
-            
-
-        
     });
+             
+   
 
 </script>
 
