@@ -120,134 +120,73 @@
     }
 
 
-    const button_a = document.getElementById("A");
-    let marker_a = false;
-
-    button_a.addEventListener("click", () => sendSignalLeftward(true));
-
-    document.addEventListener("keydown", function(event){
-        
-    if (event.code !== "KeyA") return;
-
-    if (marker_a) return;
-
-        marker_a = true;
-        event.preventDefault();
-        button_w.style.background = "#ddd";
-        sendSignalLeftward(marker_a); 
-        console.log("Кнопку затиснули!");
-
-    });
     
-    document.addEventListener("keyup", function(event){
-    
-    if (event.code !== "KeyA") return;
+document.addEventListener("keydown", function(event) {
+    if (event.repeat) return; 
 
-        marker_a = false;
-        event.preventDefault();
-        button_w.style.background = "#FFFFFF";
-        sendSignalLeftward(marker_a); 
-        console.log("Кнопку відпустили!");
+    switch(event.code) {
+        case "KeyW":
+            if (marker_w) return;
+            marker_w = true;
+            event.preventDefault();
+            button_w.style.background = "#ddd";
+            sendSignalForward(true);
+            break;
 
+        case "KeyS":
+            if (marker_s) return;
+            marker_s = true;
+            event.preventDefault();
+            button_s.style.background = "#ddd";
+            sendSignalBackward(true);
+            break;
 
-    });
+        case "KeyD":
+            if (marker_d) return;
+            marker_d = true;
+            event.preventDefault();
+            button_d.style.background = "#ddd";
+            sendSignalRightward(true);
+            break;
 
-    const button_w = document.getElementById("W");
-    let marker_w = false;
-
-    button_w.addEventListener("click", () => sendSignalForward(true));
-
-    document.addEventListener("keydown", function(event){
-        
-    if (event.code !== "KeyW") return;
-
-    if (marker_w) return;
-
-        marker_w = true;
-        event.preventDefault();
-        button_w.style.background = "#ddd";
-        sendSignalForward(marker_w); 
-        console.log("Кнопку затиснули!");
-
-    });
-    
-    document.addEventListener("keyup", function(event){
-    
-    if (event.code !== "KeyW") return;
-
-        marker_w = false;
-        event.preventDefault();
-        button_w.style.background = "#FFFFFF";
-        sendSignalForward(marker_w); 
-        console.log("Кнопку відпустили!");
+        case "KeyA":
+            if (marker_a) return;
+            marker_a = true;
+            event.preventDefault();
+            button_a.style.background = "#ddd";
+            sendSignalLeftward(true);
+            break;
+    }
+});
 
 
-    });
+document.addEventListener("keyup", function(event) {
+    switch(event.code) {
+        case "KeyW":
+            marker_w = false;
+            button_w.style.background = "#FFFFFF";
+            sendSignalForward(false);
+            break;
 
-    const button_s = document.getElementById("S");
-    let marker_s = false;
+        case "KeyS":
+            marker_s = false;
+            button_s.style.background = "#FFFFFF";
+            sendSignalBackward(false);
+            break;
 
-    button_s.addEventListener("click", () => sendSignalBackward(true));
+        case "KeyD":
+            marker_d = false;
+            button_d.style.background = "#FFFFFF";
+            sendSignalRightward(false);
+            break;
 
-    document.addEventListener("keydown", function(event){
-        
-    if (event.code !== "KeyS") return;
-
-    if (marker_s) return;
-
-        marker_s = true;
-        event.preventDefault();
-        button_s.style.background = "#ddd";
-        sendSignalBackward(marker_s); 
-        console.log("Кнопку затиснули!");
-
-    });
-    
-    document.addEventListener("keyup", function(event){
-    
-    if (event.code !== "KeyS") return;
-
-        marker_s = false;
-        event.preventDefault();
-        button_s.style.background = "#FFFFFF";
-        sendSignalBackward(marker_s); 
-        console.log("Кнопку відпустили!");
-
-
-    });
-
-
-    const button_d = document.getElementById("D");
-    let marker_d = false;
-
-    button_d.addEventListener("click", () => sendSignalRightward(true));
-
-    document.addEventListener("keydown", function(event){
-        
-    if (event.code !== "KeyD") return;
-
-    if (marker_d) return;
-
-        marker_d = true;
-        event.preventDefault();
-        button_d.style.background = "#ddd";
-        sendSignalRightward(marker_d); 
-        console.log("Кнопку затиснули!");
-
-    });
-    
-    document.addEventListener("keyup", function(event){
-    
-    if (event.code !== "KeyD") return;
-
-        marker_d = false;
-        event.preventDefault();
-        button_d.style.background = "#FFFFFF";
-        sendSignalRightward(marker_d); 
-        console.log("Кнопку відпустили!");
-
-
-    });
+        case "KeyA":
+            marker_a = false;
+            button_a.style.background = "#FFFFFF";
+            sendSignalLeftward(false);
+            break;
+    }
+});
 
           
     
