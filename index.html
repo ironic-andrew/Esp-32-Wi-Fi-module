@@ -254,6 +254,7 @@ const client = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
                 button_mode_1.style.background = "#7f8183";
                 button_mode_2.style.background = "#212529";
             }
+            console.log("key1 натиснута");
             event.preventDefault();
             sendSignalMode();
             
@@ -264,6 +265,7 @@ const client = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
                 button_mode_1.style.background = "#212529";
                 button_mode_2.style.background = "#7f8183";
             }
+            console.log("key2 натиснута");
             event.preventDefault();
             sendSignalMode();
 
