@@ -137,7 +137,7 @@
 
     document.addEventListener("keydown", function(event){
         
-    if (event.key.toLowerCase() !== "d" && event.key.toLocaleLowerCase() !== "в") return;
+    if (event.code !== "KeyD") return;
 
     if (marker_d) return;
 
@@ -151,7 +151,7 @@
     
     document.addEventListener("keyup", function(event){
     
-    if (event.key.toLowerCase() !== "d" && event.key.toLocaleLowerCase() !== "в") return;
+    if (event.code !== "KeyD") return;
 
         marker_d = false;
         event.preventDefault();
