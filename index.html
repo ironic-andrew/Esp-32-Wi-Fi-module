@@ -51,10 +51,10 @@
     <div class="d-flex justify-content-center align-items-center vh-100">
     
         <div class="position-absolute top-0 start-0 p-3 d-flex gap-2">
-        <button id="btn-1" type="button" class="btn btn-outline-light opacity-50 opacity-100-down border-secondary shadow-none">
+        <button id="btn1" type="button" class="btn btn-outline-light opacity-50 opacity-100-down border-secondary shadow-none">
           1
         </button>
-        <button id="btn-2" type="button" class="btn btn-outline-light opacity-50 opacity-100-down border-secondary shadow-none">
+        <button id="btn2" type="button" class="btn btn-outline-light opacity-50 opacity-100-down border-secondary shadow-none">
           2
         </button>
         </div>
@@ -119,8 +119,8 @@ const client = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
     let mode_1 = false;
     let mode_2 = false;
 
-    const button_mode_1 = document.getElementById("1");
-    const button_mode_2 = document.getElementById("2");
+    const button_mode_1 = document.getElementById("btn1");
+    const button_mode_2 = document.getElementById("btn2");
 
 
 
