@@ -45,6 +45,12 @@ const client = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
     let marker_w = false;
     let marker_s = false;
     let marker_d = false;
+
+    //buttom initialization
+    const button_a = document.getElementById("A");
+    const button_w = document.getElementById("W");
+    const button_s = document.getElementById("S");
+    const button_d = document.getElementById("D");
     
 
     //leftward_go/leftward_stop checker
