@@ -16,6 +16,14 @@
 
     </style>
 
+    <style>
+  .btn-responsive {
+    font-size: calc(0.8rem + 0.5vw);
+    padding: calc(0.3rem + 0.3vw) calc(0.6rem + 0.6vw);
+    white-space: nowrap;
+  }
+</style>
+
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
 <title>Robot diraction</title>
 </head>
@@ -29,7 +37,33 @@
 <button id = "D" type="button" class = "buttom1">D</button>
 
 
-<button type="button" class="btn btn-primary">Primary</button>
+<div class="d-flex justify-content-center align-items-center vh-100 bg-light">
+  
+  <div class="ratio ratio-1x1 w-80 w-sm-60 w-md-40" style="max-width: 400px; max-height: 400px;">
+    <div class="position-relative">
+      
+      <button class="btn btn-primary btn-responsive position-absolute top-0 start-50 translate-middle-x">
+        Вище
+      </button>
+
+      <button class="btn btn-primary btn-responsive position-absolute top-50 start-0 translate-middle-y">
+        Лівіше
+      </button>
+
+      <button class="btn btn-success btn-responsive position-absolute top-50 start-50 translate-middle fw-bold">
+        Центр
+      </button>
+
+      <button class="btn btn-primary btn-responsive position-absolute top-50 end-0 translate-middle-y">
+        Правіше
+      </button>
+
+    </div>
+  </div>
+
+</div>
+
+
 
 
 <!-- Ініціалізація брокера   -->
@@ -197,11 +231,6 @@ const client = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
 
 
     });
-
-          
-    
-
-   
 
 </script>
 
