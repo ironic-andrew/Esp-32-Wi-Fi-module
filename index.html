@@ -43,8 +43,21 @@
 
     function sendSignalLeftward() {
       
-      client.publish('ukraine/esp32/Wi-Fi_module', 'leftward');
-      console.log("Сигнал надіслано в хмару");
+      if(marker_a == true){
+
+            client.publish('ukraine/esp32/Wi-Fi_module', 'leftward_go');
+            console.log("Сигнал їхати наліво надіслано в хмару");
+
+        }else if(marker_a == false){
+
+            client.publish('ukraine/esp32/Wi-Fi_module', 'leftward_stop');
+            console.log("Сигнал зупинитися наліво надіслано в хмару");
+
+        }else{
+
+            console.log("Щось пішло не так в sendSignalLeftward");
+
+        }
     }
 
     function sendSignalForward() {
@@ -69,15 +82,25 @@
 
     function sendSignalBackward() {
       
-      client.publish('ukraine/esp32/Wi-Fi_module', 'backward');
-      console.log("Сигнал надіслано в хмару");
+      if(marker_s == true){
+
+            client.publish('ukraine/esp32/Wi-Fi_module', 'backward_go');
+            console.log("Сигнал їхати назад надіслано в хмару");
+
+        }else if(marker_s == false){
+
+            client.publish('ukraine/esp32/Wi-Fi_module', 'backward_stop');
+            console.log("Сигнал зупинитися назад надіслано в хмару");
+
+        }else{
+
+            console.log("Щось пішло не так в sendSignalBackward");
+
+        }
     }
 
     function sendSignalRightward() {
       
-      
-      
-
         if(marker_d == true){
 
             client.publish('ukraine/esp32/Wi-Fi_module', 'rightward_go');
@@ -100,17 +123,33 @@
     const button_a = document.getElementById("A");
     let marker_a = false;
 
-    button_a.addEventListener("click", sendSignalLeftward);
+    button_a.addEventListener("click", () => sendSignalLeftward(true));
 
     document.addEventListener("keydown", function(event){
-        if (event.repeat) return;
+        
+    if (event.code !== "KeyA") return;
 
-        if(event.key == "A" || event.key == "a"){
-            event.preventDefault();
-            button_a.style.background = "#ddd";
-            sendSignalLeftward();
+    if (marker_a) return;
 
-        }
+        marker_a = true;
+        event.preventDefault();
+        button_w.style.background = "#ddd";
+        sendSignalLeftward(marker_a); 
+        console.log("Кнопку затиснули!");
+
+    });
+    
+    document.addEventListener("keyup", function(event){
+    
+    if (event.code !== "KeyA") return;
+
+        marker_a = false;
+        event.preventDefault();
+        button_w.style.background = "#FFFFFF";
+        sendSignalLeftward(marker_a); 
+        console.log("Кнопку відпустили!");
+
+
     });
 
     const button_w = document.getElementById("W");
@@ -146,18 +185,35 @@
     });
 
     const button_s = document.getElementById("S");
+    let marker_s = false;
 
-    button_s.addEventListener("click", sendSignalBackward);
+    button_s.addEventListener("click", () => sendSignalBackward(true));
 
     document.addEventListener("keydown", function(event){
-        if (event.repeat) return;
+        
+    if (event.code !== "KeyW") return;
 
-        if(event.key == "S" || event.key == "s"){
-            event.preventDefault();
-            button_s.style.background = "#ddd";
-            sendSignalBackward();
+    if (marker_s) return;
 
-        }
+        marker_s = true;
+        event.preventDefault();
+        button_s.style.background = "#ddd";
+        sendSignalBackward(marker_s); 
+        console.log("Кнопку затиснули!");
+
+    });
+    
+    document.addEventListener("keyup", function(event){
+    
+    if (event.code !== "KeyS") return;
+
+        marker_s = false;
+        event.preventDefault();
+        button_w.style.background = "#FFFFFF";
+        sendSignalBackward(marker_s); 
+        console.log("Кнопку відпустили!");
+
+
     });
 
 
