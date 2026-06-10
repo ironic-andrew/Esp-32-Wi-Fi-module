@@ -20,14 +20,10 @@
 <body>
 
 
-
-
+<!-- Bottom AWSD -->
 <button id = "A" type="button" class = "buttom1">A</button>
-
 <button id = "W" type="button" class = "buttom1">W</button>
-
 <button id = "S" type="button" class = "buttom1">S</button>
-
 <button id = "D" type="button" class = "buttom1">D</button>
 
 
@@ -41,6 +37,7 @@
       console.log('Підключено до MQTT брокера!');
   });
 
+    //leftward_go/leftward_stop checker
     function sendSignalLeftward() {
       
       if(marker_a == true){
@@ -60,6 +57,7 @@
         }
     }
 
+    //forward_go/forward_stop checker
     function sendSignalForward() {
       
       if(marker_w == true){
@@ -80,6 +78,7 @@
 
     }
 
+    //backward_go/backward_stop checker
     function sendSignalBackward() {
       
       if(marker_s == true){
@@ -99,6 +98,7 @@
         }
     }
 
+    //leftward_go/leftward_stop checker
     function sendSignalRightward() {
       
         if(marker_d == true){
@@ -119,74 +119,73 @@
 
     }
 
+    //Keydown checker    
+    document.addEventListener("keydown", function(event) {
+        if (event.repeat) return; 
 
-    
-document.addEventListener("keydown", function(event) {
-    if (event.repeat) return; 
+        switch(event.code) {
+            case "KeyW":
+                if (marker_w) return;
+                marker_w = true;
+                event.preventDefault();
+                button_w.style.background = "#ddd";
+                sendSignalForward(true);
+                break;
 
-    switch(event.code) {
-        case "KeyW":
-            if (marker_w) return;
-            marker_w = true;
-            event.preventDefault();
-            button_w.style.background = "#ddd";
-            sendSignalForward(true);
-            break;
+            case "KeyS":
+                if (marker_s) return;
+                marker_s = true;
+                event.preventDefault();
+                button_s.style.background = "#ddd";
+                sendSignalBackward(true);
+                break;
 
-        case "KeyS":
-            if (marker_s) return;
-            marker_s = true;
-            event.preventDefault();
-            button_s.style.background = "#ddd";
-            sendSignalBackward(true);
-            break;
+            case "KeyD":
+                if (marker_d) return;
+                marker_d = true;
+                event.preventDefault();
+                button_d.style.background = "#ddd";
+                sendSignalRightward(true);
+                break;
 
-        case "KeyD":
-            if (marker_d) return;
-            marker_d = true;
-            event.preventDefault();
-            button_d.style.background = "#ddd";
-            sendSignalRightward(true);
-            break;
+            case "KeyA":
+                if (marker_a) return;
+                marker_a = true;
+                event.preventDefault();
+                button_a.style.background = "#ddd";
+                sendSignalLeftward(true);
+                break;
+        }
+    });
 
-        case "KeyA":
-            if (marker_a) return;
-            marker_a = true;
-            event.preventDefault();
-            button_a.style.background = "#ddd";
-            sendSignalLeftward(true);
-            break;
-    }
-});
+    //Keyup checker
+    document.addEventListener("keyup", function(event) {
+        switch(event.code) {
+            case "KeyW":
+                marker_w = false;
+                button_w.style.background = "#FFFFFF";
+                sendSignalForward(false);
+                break;
 
+            case "KeyS":
+                marker_s = false;
+                button_s.style.background = "#FFFFFF";
+                sendSignalBackward(false);
+                break;
 
-document.addEventListener("keyup", function(event) {
-    switch(event.code) {
-        case "KeyW":
-            marker_w = false;
-            button_w.style.background = "#FFFFFF";
-            sendSignalForward(false);
-            break;
+            case "KeyD":
+                marker_d = false;
+                button_d.style.background = "#FFFFFF";
+                sendSignalRightward(false);
+                break;
 
-        case "KeyS":
-            marker_s = false;
-            button_s.style.background = "#FFFFFF";
-            sendSignalBackward(false);
-            break;
-
-        case "KeyD":
-            marker_d = false;
-            button_d.style.background = "#FFFFFF";
-            sendSignalRightward(false);
-            break;
-
-        case "KeyA":
-            marker_a = false;
-            button_a.style.background = "#FFFFFF";
-            sendSignalLeftward(false);
-            break;
-    }
-});
+            case "KeyA":
+                marker_a = false;
+                button_a.style.background = "#FFFFFF";
+                sendSignalLeftward(false);
+                break;
+        }
+    });
 
           
     
