@@ -247,7 +247,7 @@ const client = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
 
         }
 
-        if(event.code === "Digital1"){
+        if(event.code === "Digit1"){
             mode_1 = true;
             mode_2 = false;
             if(button_mode_1) {
@@ -258,7 +258,7 @@ const client = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
             event.preventDefault();
             sendSignalMode();
             
-        }else  if(event.code === "Digital2"){
+        }else  if(event.code === "Digit2"){
             mode_2 = true;
             mode_1 = false;
             if(button_mode_2) {
