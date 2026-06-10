@@ -30,12 +30,22 @@
 <!-- Ініціалізація брокера   -->
 <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
 <script>
-    
-    const client = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
+
+const client = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
 
   client.on('connect', () => {
       console.log('Підключено до MQTT брокера!');
   });
+
+</script>
+
+<script>
+    //marker initialization
+    let marker_a = false;
+    let marker_w = false;
+    let marker_s = false;
+    let marker_d = false;
+    
 
     //leftward_go/leftward_stop checker
     function sendSignalLeftward() {
