@@ -178,28 +178,28 @@ const client = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
 
         if(event.code === "KeyW" && !marker_w){
             marker_w = true;
-            if(button_w) button_w.style.background = "#ddd";
+            if(button_w) button_w.style.background = "#7f8183";
             event.preventDefault();
             changed = true;
         }
 
         if(event.code === "KeyS" && !marker_s){
             marker_s = true;
-            if(button_s) button_s.style.background = "#ddd";
+            if(button_s) button_s.style.background = "#7f8183";
             event.preventDefault();
             changed = true;
         }
 
         if(event.code === "KeyA" && !marker_a){
             marker_a = true;
-            if(button_a) button_a.style.background = "#ddd";
+            if(button_a) button_a.style.background = "#7f8183";
             event.preventDefault();
             changed = true;
         }
 
         if(event.code === "KeyD" && !marker_d){
             marker_d = true;
-            if(button_d) button_d.style.background = "#ddd";
+            if(button_d) button_d.style.background = "#7f8183";
             event.preventDefault();
             changed = true;
         }
@@ -219,25 +219,25 @@ const client = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
 
         if(event.code === "KeyW"){
             marker_w = false;
-            if(button_w) button_w.style.background = "#FFFFFF";
+            if(button_w) button_w.style.background = "#212529";
             changed = true;
         }
 
         if(event.code === "KeyS"){
             marker_s = false;
-            if(button_s) button_s.style.background = "#FFFFFF";
+            if(button_s) button_s.style.background = "#212529";
             changed = true;
         }
 
         if(event.code === "KeyA"){
             marker_a = false;
-            if(button_a) button_a.style.background = "#FFFFFF";
+            if(button_a) button_a.style.background = "#212529";
             changed = true;
         }
 
         if(event.code === "KeyD"){
             marker_d = false;
-            if(button_d) button_d.style.background = "#FFFFFF";
+            if(button_d) button_d.style.background = "#212529";
             changed = true;
         }
 
