@@ -95,6 +95,16 @@ const client = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
         client.publish('ukraine/esp32/Wi-Fi_module', 'right');
         console.log("Сигнал <right> надіслано в хмару");
 
+      }else if(marker_w && marker_s){
+
+        client.publish('ukraine/esp32/Wi-Fi_module', 'all_stop');
+        console.log("Конфлікт <forward> і <backward> надіслано в хмару");
+
+      }else if(marker_a && marker_d){
+
+        client.publish('ukraine/esp32/Wi-Fi_module', 'all_stop');
+        console.log("Конфлікт <left> і <right> надіслано в хмару");
+
       }else{
 
         client.publish('ukraine/esp32/Wi-Fi_module', 'all_stop');
