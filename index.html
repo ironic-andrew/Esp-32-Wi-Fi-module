@@ -211,7 +211,7 @@ const client = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
     //Keydown checker    
     document.addEventListener("keydown", function(event) {
         let changed = false;
-        let chenged_mode = false; 
+        
 
         if(event.code === "KeyW" && !marker_w){
             marker_w = true;
@@ -273,6 +273,7 @@ const client = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
     //Keyup checker
     document.addEventListener("keyup", function(event) {
         let changed = false; 
+        let chenged_mode = false; 
 
         if(event.code === "KeyW"){
             marker_w = false;
