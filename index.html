@@ -51,12 +51,12 @@
       
       if(marker_w == true){
 
-            client.publish('ukraine/esp32/Wi-Fi_module', 'rightward_go');
+            client.publish('ukraine/esp32/Wi-Fi_module', 'forward_go');
             console.log("Сигнал їхати в прямо надіслано в хмару");
 
         }else if(marker_w == false){
 
-            client.publish('ukraine/esp32/Wi-Fi_module', 'rightward_stop');
+            client.publish('ukraine/esp32/Wi-Fi_module', 'forward_stop');
             console.log("Сигнал зупинитися прямо надіслано в хмару");
 
         }else{
@@ -116,7 +116,7 @@
     const button_w = document.getElementById("W");
     let marker_w = false;
 
-    button_w.addEventListener("click", () => sendSignalForward(true));
+    button_w.addEventListener("click", () => sendSignalRightward(true));
 
     document.addEventListener("keydown", function(event){
         
@@ -126,7 +126,7 @@
 
         marker_w = true;
         event.preventDefault();
-        button_w.style.background = "#ddd";
+        button_d.style.background = "#ddd";
         sendSignalRightward(marker_w); 
         console.log("Кнопку затиснули!");
 
