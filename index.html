@@ -54,153 +54,133 @@ const client = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
     
 
     //leftward_go/leftward_stop checker
-    function sendSignalLeftward() {
+    function sendSignal() {
+      if(marker_w && marker_a){
+
+        client.publish('ukraine/esp32/Wi-Fi_module', 'forward_left');
+        console.log("Сигнал <forward_left> надіслано в хмару");
+
+      }else if(marker_w && marker_d){
+
+        client.publish('ukraine/esp32/Wi-Fi_module', 'forward_right');
+        console.log("Сигнал <forward_right> надіслано в хмару");
+
+      }else if(marker_s && marker_a){
+
+        client.publish('ukraine/esp32/Wi-Fi_module', 'backward_left');
+        console.log("Сигнал <backward_left> надіслано в хмару");
+
+      }else if(marker_s && marker_d){
+
+        client.publish('ukraine/esp32/Wi-Fi_module', 'backward_right');
+        console.log("Сигнал <backward_right> надіслано в хмару");
+
+      }else if(marker_w){
+
+        client.publish('ukraine/esp32/Wi-Fi_module', 'forward');
+        console.log("Сигнал <forward> надіслано в хмару");
+
+      }else if(marker_s){
+
+        client.publish('ukraine/esp32/Wi-Fi_module', 'backward');
+        console.log("Сигнал <backward> надіслано в хмару");
+
+      }else if(marker_a){
+
+        client.publish('ukraine/esp32/Wi-Fi_module', 'left');
+        console.log("Сигнал <left> надіслано в хмару");
+
+      }else if(marker_d){
+
+        client.publish('ukraine/esp32/Wi-Fi_module', 'right');
+        console.log("Сигнал <right> надіслано в хмару");
+
+      }else{
+
+        client.publish('ukraine/esp32/Wi-Fi_module', 'all_stop');
+        console.log("Сигнал <all_stop> надіслано в хмару");
+
+      }
       
-      if(marker_a == true){
-
-            client.publish('ukraine/esp32/Wi-Fi_module', 'leftward_go');
-            console.log("Сигнал їхати наліво надіслано в хмару");
-
-        }else if(marker_a == false){
-
-            client.publish('ukraine/esp32/Wi-Fi_module', 'leftward_stop');
-            console.log("Сигнал зупинитися наліво надіслано в хмару");
-
-        }else{
-
-            console.log("Щось пішло не так в sendSignalLeftward");
-
-        }
-    }
-
-    //forward_go/forward_stop checker
-    function sendSignalForward() {
-      
-      if(marker_w == true){
-
-            client.publish('ukraine/esp32/Wi-Fi_module', 'forward_go');
-            console.log("Сигнал їхати в прямо надіслано в хмару");
-
-        }else if(marker_w == false){
-
-            client.publish('ukraine/esp32/Wi-Fi_module', 'forward_stop');
-            console.log("Сигнал зупинитися прямо надіслано в хмару");
-
-        }else{
-
-            console.log("Щось пішло не так в sendSignalForward");
-
-        }
-
-    }
-
-    //backward_go/backward_stop checker
-    function sendSignalBackward() {
-      
-      if(marker_s == true){
-
-            client.publish('ukraine/esp32/Wi-Fi_module', 'backward_go');
-            console.log("Сигнал їхати назад надіслано в хмару");
-
-        }else if(marker_s == false){
-
-            client.publish('ukraine/esp32/Wi-Fi_module', 'backward_stop');
-            console.log("Сигнал зупинитися назад надіслано в хмару");
-
-        }else{
-
-            console.log("Щось пішло не так в sendSignalBackward");
-
-        }
-    }
-
-    //leftward_go/leftward_stop checker
-    function sendSignalRightward() {
-      
-        if(marker_d == true){
-
-            client.publish('ukraine/esp32/Wi-Fi_module', 'rightward_go');
-            console.log("Сигнал їхати в право надіслано в хмару");
-
-        }else if(marker_d == false){
-
-            client.publish('ukraine/esp32/Wi-Fi_module', 'rightward_stop');
-            console.log("Сигнал зупинитися в право надіслано в хмару");
-
-        }else{
-
-            console.log("Щось пішло не так в sendSignalRightward");
-
-        }
 
     }
 
     //Keydown checker    
     document.addEventListener("keydown", function(event) {
-        if (event.repeat) return; 
+        let changed = false; 
 
-        switch(event.code) {
-            case "KeyW":
-                if (marker_w) return;
-                marker_w = true;
-                event.preventDefault();
-                button_w.style.background = "#ddd";
-                sendSignalForward(true);
-                break;
-
-            case "KeyS":
-                if (marker_s) return;
-                marker_s = true;
-                event.preventDefault();
-                button_s.style.background = "#ddd";
-                sendSignalBackward(true);
-                break;
-
-            case "KeyD":
-                if (marker_d) return;
-                marker_d = true;
-                event.preventDefault();
-                button_d.style.background = "#ddd";
-                sendSignalRightward(true);
-                break;
-
-            case "KeyA":
-                if (marker_a) return;
-                marker_a = true;
-                event.preventDefault();
-                button_a.style.background = "#ddd";
-                sendSignalLeftward(true);
-                break;
+        if(event.code === "KeyW" && !marker_w){
+            marker_w = true;
+            if(button_w) button_w.style.background = "#ddd";
+            event.preventDefault();
+            changed = true;
         }
+
+        if(event.code === "KeyS" && !marker_s){
+            marker_w = true;
+            if(button_s) button_s.style.background = "#ddd";
+            event.preventDefault();
+            changed = true;
+        }
+
+        if(event.code === "KeyA" && !marker_a){
+            marker_a = true;
+            if(button_a) button_a.style.background = "#ddd";
+            event.preventDefault();
+            changed = true;
+        }
+
+        if(event.code === "KeyD" && !marker_d){
+            marker_d = true;
+            if(button_d) button_d.style.background = "#ddd";
+            event.preventDefault();
+            changed = true;
+        }
+
+        if(changed){
+
+            sendSignal();
+
+        }
+
+        
     });
 
     //Keyup checker
     document.addEventListener("keyup", function(event) {
-        switch(event.code) {
-            case "KeyW":
-                marker_w = false;
-                button_w.style.background = "#FFFFFF";
-                sendSignalForward(false);
-                break;
+        let changed = false; 
 
-            case "KeyS":
-                marker_s = false;
-                button_s.style.background = "#FFFFFF";
-                sendSignalBackward(false);
-                break;
-
-            case "KeyD":
-                marker_d = false;
-                button_d.style.background = "#FFFFFF";
-                sendSignalRightward(false);
-                break;
-
-            case "KeyA":
-                marker_a = false;
-                button_a.style.background = "#FFFFFF";
-                sendSignalLeftward(false);
-                break;
+        if(event.code === "KeyW"){
+            marker_w = false;
+            if(button_w) button_w.style.background = "#FFFFFF";
+            changed = true;
         }
+
+        if(event.code === "KeyS"){
+            marker_s = false;
+            if(button_s) button_s.style.background = "#FFFFFF";
+            changed = true;
+        }
+
+        if(event.code === "KeyA"){
+            marker_a = false;
+            if(button_a) button_a.style.background = "#FFFFFF";
+            changed = true;
+        }
+
+        if(event.code === "KeyD"){
+            marker_d = false;
+            if(button_d) button_d.style.background = "#FFFFFF";
+            changed = true;
+        }
+
+        if(changed){
+
+            sendSignal();
+
+        }
+
+
     });
 
           
