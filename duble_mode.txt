@@ -226,16 +226,11 @@ void loop() {
   if(mode){
     u8x8.clear();
 
-    if(!mode){
-
-     if (!client.connected()) { 
+    if (!client.connected()) { 
     reconnect(); 
   
     }
- 
     client.loop(); 
-
-    }
 
     short position = sensorsRead();
     short error = position;
