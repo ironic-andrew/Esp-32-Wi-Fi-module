@@ -116,6 +116,13 @@ const client = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
     const button_s = document.getElementById("S");
     const button_d = document.getElementById("D");
     
+    let mode_1 = false;
+    let mode_2 = false;
+
+    const button_mode_1 = document.getElementById("1");
+    const button_mode_2 = document.getElementById("2");
+
+
 
     //direction checker
     function sendSignal() {
@@ -179,9 +186,32 @@ const client = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
 
     }
 
+    function sendSignalMode() {
+
+        if(mode_1){
+
+            client.publish('ukraine/esp32/Wi-Fi_module', 'mode1');
+            console.log("Сигнал <mode1> надіслано в хмару");
+
+        }else if(mode_2){
+
+            client.publish('ukraine/esp32/Wi-Fi_module', 'mode2');
+            console.log("Сигнал <mode2> надіслано в хмару");
+
+        }else{
+
+            client.publish('ukraine/esp32/Wi-Fi_module', 'mode1');
+            console.log("Сигнал <mode1_default> надіслано в хмару");
+
+
+        }
+
+    }
+
     //Keydown checker    
     document.addEventListener("keydown", function(event) {
-        let changed = false; 
+        let changed = false;
+        let chenged_mode = false; 
 
         if(event.code === "KeyW" && !marker_w){
             marker_w = true;
@@ -251,6 +281,33 @@ const client = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
         if(changed){
 
             sendSignal();
+
+        }
+
+        if(event.code === "Key1"){
+            mode_1 = true;
+            mode_2 = false;
+            if(button_mode_1) {
+                button_mode_1.style.background = "#7f8183";
+                button_mode_2.style.background = "#212529";
+            }
+            event.preventDefault();
+            chenged_mode = true;
+        }else  if(event.code === "Key2"){
+            mode_2 = true;
+            mode_1 = false;
+            if(button_mode_2) {
+                button_mode_1.style.background = "#212529";
+                button_mode_2.style.background = "#7f8183";
+            }
+            event.preventDefault();
+            chenged_mode = true;
+
+        }
+
+        if(chenged_mode){
+
+            sendSignalMode();
 
         }
 
