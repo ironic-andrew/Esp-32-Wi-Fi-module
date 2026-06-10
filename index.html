@@ -313,7 +313,8 @@ const client = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
                 button_mode_2.style.background = "#212529";
             }
             event.preventDefault();
-            chenged_mode = true;
+            sendSignalMode();
+            
         }else  if(event.code === "Key2"){
             mode_2 = true;
             mode_1 = false;
@@ -322,16 +323,9 @@ const client = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
                 button_mode_2.style.background = "#7f8183";
             }
             event.preventDefault();
-            chenged_mode = true;
-
-        }
-
-        if(chenged_mode){
-
             sendSignalMode();
 
         }
-
 
     });
 
