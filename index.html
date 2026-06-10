@@ -247,6 +247,26 @@ const client = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
 
         }
 
+        if(event.code === "Key1"){
+            mode_1 = true;
+            mode_2 = false;
+            if(button_mode_1) {
+                button_mode_1.style.background = "#7f8183";
+                button_mode_2.style.background = "#212529";
+            }
+            event.preventDefault();
+            
+        }else if(event.code === "Key2"){
+            mode_2 = true;
+            mode_1 = false;
+            if(button_mode_2) {
+                button_mode_1.style.background = "#212529";
+                button_mode_2.style.background = "#7f8183";
+            }
+            event.preventDefault()
+
+        }
+
         
     });
 
