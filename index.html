@@ -15,7 +15,9 @@
 
 
     </style>
-<title>Page Title</title>
+
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
+<title>Robot diraction</title>
 </head>
 <body>
 
@@ -25,6 +27,9 @@
 <button id = "W" type="button" class = "buttom1">W</button>
 <button id = "S" type="button" class = "buttom1">S</button>
 <button id = "D" type="button" class = "buttom1">D</button>
+
+
+<button type="button" class="btn btn-primary">Primary</button>
 
 
 <!-- Ініціалізація брокера   -->
@@ -53,7 +58,7 @@ const client = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
     const button_d = document.getElementById("D");
     
 
-    //leftward_go/leftward_stop checker
+    //direction checker
     function sendSignal() {
       if(marker_w && marker_a){
 
@@ -200,5 +205,6 @@ const client = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
 
 </script>
 
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous"></script>
 </body>
 </html>
