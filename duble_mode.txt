@@ -5,11 +5,14 @@
 #include <U8g2lib.h>
 #include <Wire.h>
 
+// ----- display initialization -----
 U8X8_SH1106_128X64_NONAME_HW_I2C u8x8(/* reset=*/ -1, /* clock=*/ 9, /* data=*/ 8);
 
-bool mode = false;
+// ----- type mode -----
+bool mode1 = true;//mode1(default) - manual control
+bool mode2 = false;//mode2 - robot liner
 
-// --- motors initialization --- Motors
+// ----- motors initialization -----
 const int8_t motors[4] = {38, 37, 40, 39};
 /*
 38 - left forward 
@@ -19,7 +22,6 @@ const int8_t motors[4] = {38, 37, 40, 39};
 */
 
 // ---- mode 1 ---- 
-
 const char* ssid = "OpenSpace322";
 const char* password = "LAN322LAN";
 const char* mqtt_server = "broker.emqx.io";
@@ -39,6 +41,9 @@ uint8_t baseSpeed = 60;
 short leftSpeed = 0;
 short rightSpeed = 0;
 
+bool calibrate_marker = true;
+unsigned long lastDisplayTime = 0;
+
 // --- sensors initialization ---
 const int8_t sensors[8] = {4, 5, 6, 7, 10, 11, 13, 12};//pin order is reverse 
 
@@ -50,16 +55,16 @@ short sensor_min[8] = {10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000};
 const short weights[8] = {-4000, -3000, -2000, -1000, 1000, 2000, 3000, 4000};
 
 
-
 // ---- mode1 ----
-
 WiFiClient espClient;
 PubSubClient client(espClient);
 
+// --- Monitor broker ---
 void callback(char* topic, byte* payload, unsigned int length) {
   Serial.print("Зловлено сигнал з топіку: ");
   Serial.println(topic);
 
+  // -- Read catch and read broker masege --
   String message = "";
   for (int i = 0; i < length; i++) { 
     message += (char)payload[i]; 
@@ -68,29 +73,24 @@ void callback(char* topic, byte* payload, unsigned int length) {
   Serial.print("Текст повідомлення: ");
   Serial.println(message);
 
+  // -- Check mode --
   if(message == "mode1"){
 
-    mode = false;
-    Serial.println("Вибрано <mode1>");
-
-  }else if(message == "mode2"){
-
-    mode = true;
-    Serial.println("Вибрано <mode2>");
-
-  }
-
-  if(message == "mode1"){
-
-    mode = false;
+    u8x8.clear();
+    mode1 = true;
+    mode2 = false;
     Serial.println("Обраний <mode1>");
 
   }else if(message == "mode2"){
 
-    mode = true;
+    mode2 = true;
+    mode1 = false; 
     Serial.println("Обраний <mode2>");
 
   }
+
+  // -- if mode1 --
+  if(mode1){
   
   if(message == "forward_left"){
 
@@ -138,12 +138,16 @@ void callback(char* topic, byte* payload, unsigned int length) {
     Motors(0, 0, 0, 0);
 
   }
+
+  }
 }
 
+// --- Conection to broker ---
 void reconnect() {
   while (!client.connected()) {
     Serial.print("Спроба підключення до MQTT брокера... ");
-    u8x8.drawString(0, 4, "Try conection to");
+    u8x8.clear();
+    u8x8.drawString(0, 3, "Try conection to");
     u8x8.drawString(3, 5, "Broker");
     
     String clientId = "ESP32_Client_" + String(random(0, 10000)); 
@@ -167,6 +171,7 @@ void reconnect() {
   }
 }
 
+// --- Connection to Wi-fi ---
 void connection(){
 
   Serial.print("Підключення до Wi-Fi: ");
@@ -187,6 +192,7 @@ void connection(){
 
 }
 
+// --- Apply motors for mode1 ---
 void Motors(int moto1_forward, int moto1_backward, int moto2_forward, int moto2_backward){
 
   analogWrite(motors[0], moto1_forward);
@@ -196,7 +202,7 @@ void Motors(int moto1_forward, int moto1_backward, int moto2_forward, int moto2_
 
 }
 
-
+// ---- setup ----
 void setup() {
   Serial.begin(115200);
 
@@ -221,54 +227,62 @@ void setup() {
   
 }
 
+// ---- loop ----
 void loop() {
 
-  if(mode){
-    u8x8.clear();
-
-    if (!client.connected()) { 
-    reconnect(); 
-  
+  // --- mode1 ---
+  if (mode1) {
+    if (!client.connected()) reconnect();
+    client.loop();
+  } else {
+    static int mqtt_counter = 0;
+    if (mqtt_counter++ > 100) {
+      client.loop();
+      mqtt_counter = 0;
     }
-    client.loop(); 
-
-    short position = sensorsRead();
-    short error = position;
-
-    short P = error;
-    integral += error;
-    short D = error - lastError;
-
-    // -- main formula --
-    short steering = (Kp * P) + (Ki * integral) + (Kd * D);
-
-    lastError = error;
-
-    leftSpeed = baseSpeed + steering;
-    rightSpeed = baseSpeed - steering;
-
-    // -- transfer date to Motors --
-    Motors(leftSpeed, rightSpeed);  
-
-
-  }else{
-
-    if (!client.connected()) { 
-    reconnect(); 
-  
-    }
- 
-    client.loop(); 
-
   }
 
+  // --- mode2 ---
+  if (mode2) {
+    if (calibrate_marker) {
+      calibrate();
+      calibrate_marker = false;
+    }
 
+    
+    short position = sensorsRead(); 
+    float error = position; 
 
+    
+    float P = error;
+    
+    integral += error;
+    
+    integral = constrain(integral, -2000, 2000); 
+    
+    float D = error - lastError;
+    lastError = error;
 
+    
+    float steering = (Kp * P) + (Ki * integral) + (Kd * D);
+
+    short leftSpeed = baseSpeed + steering;
+    short rightSpeed = baseSpeed - steering;
+
+    
+    Motors(leftSpeed, rightSpeed);  
+
+    
+    if (millis() - lastDisplayTime > 300) {
+      lastDisplayTime = millis();
+    }
+
+    //delay(2); 
+  }
 
 }
 
-
+// ---- mode2 ----
 // --- Calibation ---
 void calibrate() {
   long startTime = millis();
@@ -283,6 +297,7 @@ void calibrate() {
   // -- transfer date to Motors --
   Motors(80, -80); 
   
+  u8x8.clear();
   u8x8.drawString(3, 3, "Calibration...");
 
   int8_t current_step = 1;
@@ -437,7 +452,7 @@ int sensorsRead(){
     return position;
 }
 
-// --- apply Motors ---
+// --- Apply Motors for mode2 ---
 void Motors(short leftSpeed, short rightSpeed){
 
   /*
