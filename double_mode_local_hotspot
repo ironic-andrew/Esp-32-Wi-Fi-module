@@ -1,5 +1,5 @@
 #include <WiFi.h>
-#include <PubSubClient.h>
+#include <WebServer.h>
 
 #include <Arduino.h>
 #include <U8g2lib.h>
@@ -10,31 +10,21 @@
 U8X8_SH1106_128X64_NONAME_HW_I2C u8x8(/* reset=*/ -1, /* clock=*/ 9, /* data=*/ 8);
 
 // ----- type mode -----
-bool mode1 = true;//mode1(default) - manual control
-bool mode2 = false;//mode2 - robot liner
+volatile bool mode1 = true; 
+volatile bool mode2 = false;
 
 // ----- motors initialization -----
 const int8_t motors[4] = {38, 37, 40, 39};
-/*
-38 - left forward 
-37 - left backward
-40 - right forward
-39 - right backward
-*/
 
-// ---- mode 1 ---- 
-const char* ssid = "CSN_317";
-const char* password = "LAN317LAN";
-const char* mqtt_server = "broker.emqx.io";
-const char* topic = "ukraine/esp32/Wi-Fi_module";
+// ---- Web Server initialization ----
+WebServer server(80);
 
 // ---- mode 2 ----
-// --- coefficient ---
-float Kp = 0.15;//0.15
-float Kd = 0.8;//0.8
+// --- element initialization ---
+float Kp = 0.15;
+float Kd = 0.8;
 float Ki = 0;
 
-// --- formula elements ---
 long integral = 0;
 short lastError = 0;
 uint8_t baseSpeed = 60;
@@ -46,7 +36,7 @@ bool calibrate_marker = true;
 unsigned long lastDisplayTime = 0;
 
 // --- sensors initialization ---
-const int8_t sensors[8] = {4, 5, 6, 7, 10, 11, 13, 12};//pin order is reverse 
+const int8_t sensors[8] = {4, 5, 6, 7, 10, 11, 13, 12};
 
 // --- max/min --- calibrate ---
 short sensor_max[8] = {0, 0, 0, 0, 0, 0, 0, 0};
@@ -55,167 +45,378 @@ short sensor_min[8] = {10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000};
 // --- weight --- sensorsRead ---
 const short weights[8] = {-4000, -3000, -2000, -1000, 1000, 2000, 3000, 4000};
 
-
-// ---- mode1 ----
-WiFiClient espClient;
-PubSubClient client(espClient);
-
-// --- Monitor broker ---
-void callback(char* topic, byte* payload, unsigned int length) {
-  Serial.print("Зловлено сигнал з топіку: ");
-  Serial.println(topic);
-
-  // -- Read catch and read broker masege --
-  String message = "";
-  for (int i = 0; i < length; i++) { 
-    message += (char)payload[i]; 
-  }
-  
-  Serial.print("Текст повідомлення: ");
-  Serial.println(message);
-
-  // -- Check mode --
-  if(message == "mode1"){
-
-    u8x8.clear();
-    mode1 = true;
-    mode2 = false;
-    Serial.println("Обраний <mode1>");
-
-  }else if(message == "mode2"){
-
-    mode2 = true;
-    mode1 = false; 
-    Serial.println("Обраний <mode2>");
-
-  }
-
-  // -- if mode1 --
-  if(mode1){
-  
-  if(message == "forward_left"){
-
-    Serial.println("Команда <forward_left> успішно оброблена!"); 
-    Motors(50, 0, 80, 0);
-
-  }else if(message == "forward_right"){
-
-    Serial.println("Команда <forward_right> успішно оброблена!"); 
-    Motors(80, 0, 50, 0);
-
-  }else if(message == "backward_left"){
-
-    Serial.println("Команда <backward_left> успішно оброблена!"); 
-    Motors(0, 50, 0, 80);
-
-  }else if(message == "backward_right"){
-
-    Serial.println("Команда <backward_right> успішно оброблена!"); 
-    Motors(0, 80, 0, 50);
-
-  }else if(message == "forward"){
-
-    Serial.println("Команда <forward> успішно оброблена!"); 
-    Motors(80, 0, 80, 0);
-
-  }else if(message == "backward"){
-
-    Serial.println("Команда <backward> успішно оброблена!"); 
-    Motors(0, 80, 0, 80);
-
-  }else if(message == "left"){
-
-    Serial.println("Команда <left> успішно оброблена!"); 
-    Motors(0, 00, 80, 0);
-
-  }else if(message == "right"){
-
-    Serial.println("Команда <right> успішно оброблена!"); 
-    Motors(80, 0, 0, 0);
-
-  }else{
-
-    Serial.println("Команда <all_stop> успішно оброблена!"); 
-    Motors(0, 0, 0, 0);
-
-  }
-
-  }
-}
-
-// --- Conection to broker ---
-void reconnect() {
-  while (!client.connected()) {
-    Serial.print("Спроба підключення до MQTT брокера... ");
-    u8x8.clear();
-    u8x8.drawString(0, 3, "Try conection to");
-    u8x8.drawString(3, 5, "Broker");
-    
-    String clientId = "ESP32_Client_" + String(random(0, 10000)); 
-    
-    if (client.connect(clientId.c_str())) {
-      u8x8.clear(); 
-      Serial.println("[УСПІШНО]");
-      client.subscribe(topic); 
-      Serial.print("Підписалися на топік: ");
-      Serial.println(topic);
-      u8x8.drawString(1, 4, "Ready to work!");
-    } else {
-      u8x8.clear();
-      Serial.print("[ПОМИЛКА], код помилки = ");
-      Serial.print(client.state());
-      Serial.println(", повтор через 5 секунд...");
-      u8x8.drawString(0, 4, "Waiting connection...");
-      delay(5000);
-      u8x8.clear();
-    }
-  }
-}
-
-// --- Connection to Wi-fi ---
-void connection(){
-
-  WiFi.mode(WIFI_AP);
-
-  // 1. Lock the protocols to b/g/n
-  uint8_t protocol_bitmap = WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G | WIFI_PROTOCOL_11N;
-  esp_wifi_set_protocol(WIFI_IF_AP, protocol_bitmap);
-
-  // 2. CRITICAL FIX FOR OLD ASUS CARDS: Disable 802.11n Frame Aggregation
-  // This forces standard legacy-style packet transmissions that the PCE-N10 understands
-  esp_wifi_set_bandwidth(WIFI_IF_AP, WIFI_BW_HT20); // Force narrow 20MHz width
-  
-  #if defined(ESP_IDF_VERSION_MAJOR) && ESP_IDF_VERSION_MAJOR >= 4
-    // Disables aggregation headers in the Wi-Fi stack
-    esp_wifi_set_ps(WIFI_PS_NONE); 
-  #endif
-
-  // 3. Start broadcasting on standard Channel 6 WITH password
-  // Назва: "esp32", Пароль: "20332077", Канал: 6, Не прихована (0), Макс. підключень: 8
-  WiFi.softAP("esp32", "20332077", 6, 0, 8);
-
-  Serial.println("AP is live with Frame Aggregation disabled.");
-  
-  client.setServer(mqtt_server, 1883);
-  client.setCallback(callback);
-
-}
-
-// --- Apply motors for mode1 ---
+// ---- Apply motors for mode1 ----
 void Motors(int moto1_forward, int moto1_backward, int moto2_forward, int moto2_backward){
-
   analogWrite(motors[0], moto1_forward);
   analogWrite(motors[1], moto1_backward);
   analogWrite(motors[2], moto2_forward);
   analogWrite(motors[3], moto2_backward);
-
 }
 
-// ---- setup ----
+
+// --- HTML interface ---
+void handleRoot() {
+  String html = R"=====(
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Robot direction</title>
+    <style>
+        body { background-color: #212529; color: #f8f9fa; font-family: system-ui, sans-serif; margin: 0; padding: 0; overflow: hidden; user-select: none; -webkit-user-select: none; }
+        .vh-100 { height: 100vh; display: flex; justify-content: center; align-items: center; position: relative; }
+        .top-bar { position: absolute; top: 0; left: 0; padding: 1rem; display: flex; gap: 0.5rem; z-index: 20; }
+        .btn { background: transparent; color: #f8f9fa; border: 1px solid #6c757d; padding: 0.375rem 0.75rem; font-size: 1rem; border-radius: 0.375rem; cursor: pointer; transition: 0.15s; outline: none; opacity: 0.5; }
+        .btn:active { opacity: 1; }
+        .active-mode { background: #7f8183 !important; opacity: 1 !important; }
+        .container { width: 25%; min-width: 200px; max-width: 450px; display: flex; flex-direction: column; gap: 0.5rem; }
+        .row { display: flex; width: 100%; }
+        .justify-content-center { justify-content: center; }
+        .col-4 { width: 33.3333%; padding: 0 0.25rem; box-sizing: border-box; }
+        .btn-wasd { width: 100%; padding-top: 1.5rem; padding-bottom: 1.5rem; font-size: 2.5rem; display: flex; align-items: center; justify-content: center; }
+        #mode2_text { position: absolute; top: 0; left: 0; width: 100%; height: 100vh; display: none; justify-content: center; align-items: center; font-size: 2rem; color: #dad5d5; pointer-events: none; z-index: 5; background-color: rgba(33, 37, 41, 0.9); text-align: center; }
+    </style>
+</head>
+<body>
+    <div class="vh-100">
+        <!--   --- Mode buttom ---   -->
+        <div class="top-bar">
+            <button id="btn1" type="button" class="btn active-mode" onclick="changeMode(1)">Mode 1</button>
+            <button id="btn2" type="button" class="btn" onclick="changeMode(2)">Mode 2</button>
+        </div>
+        
+        <div id="mode2_text" style="text-shadow: 0px 4px 15px rgba(0, 0, 0, 0.75);">
+            <p style="margin: 20px;"></p>
+        </div>
+        
+
+        <!--   --- wasd_pad ---   -->
+        <div class="container" id="wasd_pad">
+            <!--   --- key wasd ---   -->
+            <div class="row justify-content-center" style="margin-bottom: 0.5rem;">
+                <div class="col-4">
+                </div>        
+                <button id="W" type="button" class="btn btn-wasd" 
+                            ontouchstart="handleTouch('W', true)" 
+                            ontouchend="handleTouch('W', false)">W</button>
+                </div>
+                <div class="row">
+                    <div class="col-4">
+                    <button id="A" type="button" class="btn btn-wasd" 
+                            ontouchstart="handleTouch('A', true)" 
+                            ontouchend="handleTouch('A', false)">A</button>
+                    </div>
+                <div class="col-4">
+                    <button id="S" type="button" class="btn btn-wasd" 
+                            ontouchstart="handleTouch('S', true)" 
+                            ontouchend="handleTouch('S', false)">S</button>
+                </div>
+                <div class="col-4">
+                    <button id="D" type="button" class="btn btn-wasd" 
+                            ontouchstart="handleTouch('D', true)" 
+                            ontouchend="handleTouch('D', false)">D</button>
+                </div>
+            </div>
+        </div>
+
+// ---- JavaScript
+<script>
+    // --- Marker initialization ---
+    let marker_a = false, marker_w = false, marker_s = false, marker_d = false;
+
+    // --- Buttom initialization ---
+    const button_a = document.getElementById("A"), button_w = document.getElementById("W"), button_s = document.getElementById("S"), button_d = document.getElementById("D");
+
+    // --- Text for mode2 ---
+    const mode2_text = document.getElementById("mode2_text");
+    
+    // --- wasd pad ---
+    const wasd_pad = document.getElementById("wasd_pad");
+    
+    // Mode buttom
+    const btn1 = document.getElementById("btn1"), btn2 = document.getElementById("btn2");
+
+    let currentMode = 1;
+
+    // --- Try send massage ---
+    function sendHttpRequest(url) { 
+        fetch(url).catch(err => console.log("Помилка відправки запиту:", err)); 
+    }
+
+    // --- Check key and click ---
+    function handleTouch(key, isPressed) {
+    
+    if (event) event.preventDefault(); 
+    
+    if (currentMode != 1) return; 
+
+    let btn = document.getElementById(key);
+    
+    if (isPressed) {
+        // Якщо пальцем натиснули: підсвічуємо кнопку і активуємо маркер
+        if(btn) { btn.style.background = "#7f8183"; btn.style.opacity = "1"; }
+        if (key === 'W') marker_w = true;
+        if (key === 'S') marker_s = true;
+        if (key === 'A') marker_a = true;
+        if (key === 'D') marker_d = true;
+    } else {
+        // Якщо палець підняли: гасимо кнопку і знімаємо маркер
+        if(btn) { btn.style.background = "transparent"; btn.style.opacity = "0.5"; }
+        if (key === 'W') marker_w = false;
+        if (key === 'S') marker_s = false;
+        if (key === 'A') marker_a = false;
+        if (key === 'D') marker_d = false;
+    }
+
+    // Відправляємо оновлену комбінацію на робота
+    sendSignal();
+}
+
+    // --- Change mode ---
+    function changeMode(modeNum) {
+        currentMode = modeNum;
+        if (currentMode === 1) {
+            btn1.classList.add("active-mode");
+            btn2.classList.remove("active-mode");
+            wasd_pad.style.display = "flex";
+            mode2_text.style.display = "none";
+            sendHttpRequest('/mode1');
+        } else if (currentMode === 2) {
+            btn2.classList.add("active-mode");
+            btn1.classList.remove("active-mode");
+            wasd_pad.style.display = "none";
+            mode2_text.style.display = "flex";
+            sendHttpRequest('/mode2');
+        }
+    }
+
+    // --- Send signal ---
+    function sendSignal() {
+      if (currentMode !== 1) return;
+      if(marker_w && marker_a) sendHttpRequest('/cmd?dir=forward_left');
+      else if(marker_w && marker_d) sendHttpRequest('/cmd?dir=forward_right');
+      else if(marker_s && marker_a) sendHttpRequest('/cmd?dir=backward_left');
+      else if(marker_s && marker_d) sendHttpRequest('/cmd?dir=backward_right');
+      else if(marker_w) sendHttpRequest('/cmd?dir=forward');
+      else if(marker_s) sendHttpRequest('/cmd?dir=backward');
+      else if(marker_a) sendHttpRequest('/cmd?dir=left');
+      else if(marker_d) sendHttpRequest('/cmd?dir=right');
+      else sendHttpRequest('/cmd?dir=stop');
+    }
+
+    // --- keydown ---
+    document.addEventListener("keydown", function(event) {
+        let changed = false;
+        if(currentMode === 1) {
+            if(event.code === "KeyW" && !marker_w){ marker_w = true; button_w.style.background = "#7f8183"; button_w.style.opacity = "1"; event.preventDefault(); changed = true; }
+            if(event.code === "KeyS" && !marker_s){ marker_s = true; button_s.style.background = "#7f8183"; button_s.style.opacity = "1"; event.preventDefault(); changed = true; }
+            if(event.code === "KeyA" && !marker_a){ marker_a = true; button_a.style.background = "#7f8183"; button_a.style.opacity = "1"; event.preventDefault(); changed = true; }
+            if(event.code === "KeyD" && !marker_d){ marker_d = true; button_d.style.background = "#7f8183"; button_d.style.opacity = "1"; event.preventDefault(); changed = true; }
+            if(changed) sendSignal();
+        }
+        if(event.code === "Digit1"){ event.preventDefault(); changeMode(1); }
+        else if(event.code === "Digit2"){ event.preventDefault(); changeMode(2); }
+    });
+
+    // --- keyup ---
+    document.addEventListener("keyup", function(event) {
+        let changed = false; 
+        if(event.code === "KeyW"){ marker_w = false; if(button_w){button_w.style.background = "transparent"; button_w.style.opacity = "0.5";} changed = true; }
+        if(event.code === "KeyS"){ marker_s = false; if(button_s){button_s.style.background = "transparent"; button_s.style.opacity = "0.5";} changed = true; }
+        if(event.code === "KeyA"){ marker_a = false; if(button_a){button_a.style.background = "transparent"; button_a.style.opacity = "0.5";} changed = true; }
+        if(event.code === "KeyD"){ marker_d = false; if(button_d){button_d.style.background = "transparent"; button_d.style.opacity = "0.5";} changed = true; }
+        if(changed) sendSignal();
+    });
+</script>
+</body>
+</html>
+  )=====";
+  server.send(200, "text/html", html);
+}
+
+// ---- mode1 ----
+// --- Check command ---
+void handleCommand() {
+  if (!mode1) {
+    server.send(200, "text/plain", "Manual mode disabled");
+    return;
+  }
+
+  String message = server.arg("dir");
+  Serial.print("Отримано команду: ");
+  Serial.println(message);
+
+  if(message == "forward_left")        Motors(50, 0, 80, 0);
+  else if(message == "forward_right")  Motors(80, 0, 50, 0);
+  else if(message == "backward_left")  Motors(0, 50, 0, 80);
+  else if(message == "backward_right") Motors(0, 80, 0, 50);
+  else if(message == "forward")        Motors(80, 0, 80, 0);
+  else if(message == "backward")       Motors(0, 80, 0, 80);
+  else if(message == "left")           Motors(0, 0, 80, 0);
+  else if(message == "right")          Motors(80, 0, 0, 0);
+  else                                 Motors(0, 0, 0, 0); // stop
+
+  server.send(200, "text/plain", "OK");
+}
+
+// ---- Change mode ----
+// --- mode1 ---
+void handleMode1() {
+  mode1 = true; mode2 = false;
+
+  analogWrite(motors[0], 0);
+  analogWrite(motors[1], 0);
+  analogWrite(motors[2], 0);
+  analogWrite(motors[3], 0);
+
+  
+  Motors((short)0, (short)0); 
+
+  u8x8.clear();
+  Serial.println("Обраний <mode1>. Усі ШІМ-піни занулені!");
+  u8x8.drawString(1, 4, "Ready to work!");
+  server.send(200, "text/plain", "Mode 1 Active");
+}
+
+// --- mode2 ---
+void handleMode2() {
+  
+  for(int i = 0; i < 8; i++) {
+    sensor_max[i] = 0;
+    sensor_min[i] = 10000;
+  }
+  integral = 0;
+  lastError = 0;
+  calibrate_marker = true; 
+
+  mode2 = true; mode1 = false; 
+  Serial.println("Обраний <mode2>");
+  server.send(200, "text/plain", "Mode 2 Active");
+}
+
+// --- Sethings hotspot and website ---
+void connection(){
+  WiFi.mode(WIFI_AP);
+
+  uint8_t protocol_bitmap = WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G | WIFI_PROTOCOL_11N;
+  esp_wifi_set_protocol(WIFI_IF_AP, protocol_bitmap);
+  esp_wifi_set_bandwidth(WIFI_IF_AP, WIFI_BW_HT20); 
+  
+  #if defined(ESP_IDF_VERSION_MAJOR) && ESP_IDF_VERSION_MAJOR >= 4
+    esp_wifi_set_ps(WIFI_PS_NONE); 
+  #endif
+
+  WiFi.softAP("esp32", "20332077", 6, 0, 8);
+  Serial.println("AP live.");
+  
+  server.on("/", handleRoot);
+  server.on("/cmd", handleCommand);
+  server.on("/mode1", handleMode1);
+  server.on("/mode2", handleMode2);
+  
+  server.begin();
+  Serial.println("Web Server started on IP: 192.168.4.1");
+  u8x8.drawString(0, 3, "Web Server Live");
+  u8x8.drawString(0, 5, "IP: 192.168.4.1");
+}
+
+// ---- mode2 ----
+// --- Calibrate ---
+void calibrate() {
+  long startTime = millis();
+  Motors(80, -80); 
+  u8x8.clear();
+  u8x8.drawString(3, 3, "Calibration...");
+
+  int8_t current_step = 1;
+
+  while(millis() - startTime < 3000) {
+    server.handleClient(); 
+    if (!mode2) { 
+      break; 
+    }
+
+    long current_time = millis() - startTime;
+    if(current_time < 1000 && current_step == 1){ u8x8.drawString(8, 5, "3"); current_step = 2; }
+    else if(current_time >= 1000 && current_step == 2){ u8x8.drawString(8, 5, "2"); current_step = 3; }
+    else if(current_time >= 2000 && current_step == 3){ u8x8.drawString(8, 5, "1"); current_step = 4; }
+    
+    for(int8_t i = 0; i < 8; ++i) {
+      short current_val = analogRead(sensors[i]);
+      if(current_val < sensor_min[i]) { sensor_min[i] = current_val; }
+      if(current_val > sensor_max[i]) { sensor_max[i] = current_val; }
+    }
+  } 
+
+  Motors(0, 0); 
+  delay(100);
+  u8x8.clear();
+  u8x8.drawString(3, 3, "Completed!");
+  delay(500);
+  u8x8.clear();
+}
+
+// --- Sensor read ---
+int sensorsRead(){
+    short sensors_read[8]; 
+    long sum = 0, count = 0, raw = 0, calibrated = 0, position = 0;
+
+    // -- read and calibrate sensors --
+    for(int i = 0; i < 8; ++i){
+      raw = analogRead(sensors[i]);
+      
+      if(sensor_max[i] == sensor_min[i]) sensor_max[i] += 1; 
+      
+      calibrated = map(raw, sensor_min[i], sensor_max[i], 0, 1000); 
+      calibrated = constrain(calibrated, 0, 1000); 
+
+      
+      if(i == 7) calibrated -= 100;
+      if(i == 5) calibrated += 70;
+      if (calibrated < 200) calibrated = 0;
+
+      
+      sensors_read[i] = calibrated;
+
+      sum += (long)calibrated * weights[i];
+      count += calibrated;
+    }
+
+    // -- print passive/active sensors
+    int8_t disp_col = 2; 
+    for(int8_t i = 7; i >= 0; --i){
+      disp_col += 1; 
+
+      if(sensors_read[i] >= 850){
+        u8x8.drawString(disp_col, 4, "+"); 
+      } else {
+        u8x8.drawString(disp_col, 4, "-"); 
+      }
+    } 
+    
+    // 3. Розрахунок помилки для PID
+    if (count == 0) return lastError;
+    position = sum / count;  
+    return position;
+}
+
+// ---- Apply motors for mode2 ----
+void Motors(short leftSpeed, short rightSpeed){
+  leftSpeed = constrain(leftSpeed, -255, 255);
+  rightSpeed = constrain(rightSpeed, -255, 255);
+
+  if(leftSpeed >= 0){ analogWrite(motors[0], leftSpeed); analogWrite(motors[1], 0); }
+  else { analogWrite(motors[0], 0); analogWrite(motors[1], abs(leftSpeed)); }
+
+  if(rightSpeed >= 0){ analogWrite(motors[2], rightSpeed); analogWrite(motors[3], 0); }
+  else { analogWrite(motors[2], 0); analogWrite(motors[3], abs(rightSpeed)); }
+}
+
+// ----- setup -----
 void setup() {
   Serial.begin(115200);
 
-  // -- motors initialization --
   pinMode(motors[0], OUTPUT);
   pinMode(motors[1], OUTPUT);
   pinMode(motors[2], OUTPUT);
@@ -227,276 +428,44 @@ void setup() {
   u8x8.begin();
   u8x8.setFlipMode(1);
   u8x8.setPowerSave(0); 
-
   u8x8.setFont(u8x8_font_chroma48medium8_r);
   u8x8.clear();
 
   connection();
-
-  
 }
 
-// ---- loop ----
+// ----- loop -----
 void loop() {
+  server.handleClient(); 
 
-  // --- mode1 ---
-  if (mode1) {
-    if (!client.connected()) reconnect();
-    client.loop();
-  } else {
-    static int mqtt_counter = 0;
-    if (mqtt_counter++ > 100) {
-      client.loop();
-      mqtt_counter = 0;
-    }
-  }
-
-  // --- mode2 ---
+  // --- Check mode 2 status ---
   if (mode2) {
     if (calibrate_marker) {
       calibrate();
       calibrate_marker = false;
     }
 
-    
+    if (!mode2) return; 
+
     short position = sensorsRead(); 
     float error = position; 
 
-    
     float P = error;
-    
     integral += error;
-    
     integral = constrain(integral, -2000, 2000); 
     
     float D = error - lastError;
     lastError = error;
 
-    
     float steering = (Kp * P) + (Ki * integral) + (Kd * D);
 
-    short leftSpeed = baseSpeed + steering;
-    short rightSpeed = baseSpeed - steering;
+    short lSpeed = baseSpeed + steering;
+    short rSpeed = baseSpeed - steering;
 
-    
-    Motors(leftSpeed, rightSpeed);  
+    Motors(lSpeed, rSpeed);  
 
-    
     if (millis() - lastDisplayTime > 300) {
       lastDisplayTime = millis();
     }
-
-    //delay(2); 
-  }
-
-}
-
-// ---- mode2 ----
-// --- Calibation ---
-void calibrate() {
-  long startTime = millis();
-  short timer = 500;
-  int8_t i = 1;
-  /*
-  u8x8.clear();
-  u8x8.setCursor(1, 4);
-  u8x8.print("Search road!");
-  */
-
-  // -- transfer date to Motors --
-  Motors(80, -80); 
-  
-  u8x8.clear();
-  u8x8.drawString(3, 3, "Calibration...");
-
-  int8_t current_step = 1;
-
-  // -- calibration loop -- 
-  while(millis() - startTime < 3000) {
-
-    long current_time = millis() - startTime;
-
-    // - print 1,2,3 on display -
-    if(current_time < 1000 && current_step == 1){
-
-      u8x8.drawString(8, 5, "3");
-      current_step = 2;
-
-    }else if(current_time >= 1000 && current_step == 2){
-
-      u8x8.drawString(8, 5, "2");
-      current_step = 3;
-
-    }else if(current_time >= 2000 && current_step == 3){
-
-      u8x8.drawString(8, 5, "1");
-      current_step = 4;
-
-    }
-    
-    // - get min/max -
-    for(int8_t i = 0; i < 8; ++i) {
-      short current_val = analogRead(sensors[i]);
-
-      if(current_val < sensor_min[i]) { sensor_min[i] = current_val; }
-      if(current_val > sensor_max[i]) { sensor_max[i] = current_val; }
-    }
-  } 
-
-  Motors(0, 0); 
-  delay(100);
-
-  u8x8.clearLine(5);
-  u8x8.clearLine(3);
-  u8x8.drawString(3, 3, "Complited!");
-
-  delay(700);
-  u8x8.clearLine(3);
-
-  /*
-  u8x8.clear();
-  u8x8.setCursor(1, 4);
-  u8x8.print("Search road!");
-  */
-}
-
-// --- Sensors Read ---
-int sensorsRead(){
-    short sensors_read[8];
-
-    long sum = 0;
-    long count = 0;
-
-    short raw = 0;
-    short calibrated = 0;
-
-    short position = 0;
-
-    /*
-    u8x8.clear();
-    u8x8.setCursor(1, 4);
-    u8x8.print("Read sensors!");
-    */
-
-    // -- main loop -- 
-    for(int i = 0; i < 8; ++i){
-
-      raw = analogRead(sensors[i]);
-
-      // - get finally date -
-      calibrated = map(raw, sensor_min[i], sensor_max[i], 0, 1000); 
-
-      calibrated = constrain(calibrated, 0, 1000); 
-
-
-      // - calibrat some sensors - 
-      if(i == 7){
-
-        calibrated = calibrated - 100;
-
-      }
-
-      if(i == 5){
-
-        calibrated = calibrated + 70;
-
-      }
-
-      if (calibrated < 200) { 
-        calibrated = 0; 
-      }
-
-      sum += (long)calibrated * weights[i];
-
-      count += calibrated;
-
-      sensors_read[i] = calibrated;
-
-      
-    }
-
-    
-    // -- print on display active/pasive sensors --
-    int8_t j = 1;
-    for(int8_t i = 7; i >= 0; --i){
-      j += 1;
-
-      if(sensors_read[i] >= 850){
-
-        u8x8.drawString(j + 2, 4, "+");
-        /*
-        u8x8.drawString(j + 2, 3, "+");
-        u8x8.drawString(j + 2, 4, "+");
-        u8x8.drawString(j + 2, 5, "+");
-        u8x8.drawString(j + 2, 6, "+");
-        */
-
-      }else{
-
-        u8x8.drawString(j + 2, 4, "-");
-        /*
-        u8x8.drawString(j + 2, 3, "-");
-        u8x8.drawString(j + 2, 4, "-");
-        u8x8.drawString(j + 2, 5, "-");
-        u8x8.drawString(j + 2, 6, "-");
-        */
-
-      }
-
-    } 
-    
-    
-    if (count == 0) {
-      return lastError; 
-    }
-
-    position = sum / count;  
-
-    /*
-    u8x8.clear();
-    u8x8.setCursor(1, 4);
-    u8x8.print("Read complited!");
-    */
-
-    return position;
-}
-
-// --- Apply Motors for mode2 ---
-void Motors(short leftSpeed, short rightSpeed){
-
-  /*
-  u8x8.clear();
-  u8x8.setCursor(0, 4);
-  u8x8.print("Set motor configuration!");
-  */
-
-  leftSpeed = constrain(leftSpeed, -255, 255);
-  rightSpeed = constrain(rightSpeed, -255, 255);
-
-  // -- left --
-  if(leftSpeed >= 0){
-
-    analogWrite(motors[0], leftSpeed);
-    analogWrite(motors[1], 0);
-
-  }else{
-
-    analogWrite(motors[0], 0);
-    analogWrite(motors[1], abs(leftSpeed));
-
-  }
-
-
-  // -- right --
-  if(rightSpeed >= 0){
-
-    analogWrite(motors[2], rightSpeed);
-    analogWrite(motors[3], 0);
-
-  }else{
-
-    analogWrite(motors[2], 0);
-    analogWrite(motors[3], abs(rightSpeed));
-
   }
 }
