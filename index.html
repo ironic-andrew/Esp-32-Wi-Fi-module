@@ -192,11 +192,13 @@ const client = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
 
             client.publish('ukraine/esp32/Wi-Fi_module', 'mode1');
             console.log("Сигнал <mode1> надіслано в хмару");
+            button_a.style.display = "none";
 
         }else if(mode_2){
 
             client.publish('ukraine/esp32/Wi-Fi_module', 'mode2');
             console.log("Сигнал <mode2> надіслано в хмару");
+            button_a.style.display = "block";
 
         }else{
 
