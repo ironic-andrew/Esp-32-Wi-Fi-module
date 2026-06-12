@@ -80,39 +80,100 @@ void handleRoot() {
 </head>
 <body>
     <div class="vh-100">
+        <!--   --- Mode buttom ---   -->
         <div class="top-bar">
             <button id="btn1" type="button" class="btn active-mode" onclick="changeMode(1)">Mode 1</button>
             <button id="btn2" type="button" class="btn" onclick="changeMode(2)">Mode 2</button>
         </div>
         
         <div id="mode2_text" style="text-shadow: 0px 4px 15px rgba(0, 0, 0, 0.75);">
-            <p style="margin: 20px;">Увімкнено режим їзди за лінією</p>
+            <p style="margin: 20px;"></p>
         </div>
         
+
+        <!--   --- wasd_pad ---   -->
         <div class="container" id="wasd_pad">
+            <!--   --- key wasd ---   -->
             <div class="row justify-content-center" style="margin-bottom: 0.5rem;">
-                <div class="col-4"><button id="W" type="button" class="btn btn-wasd">W</button></div>
-            </div>
-            <div class="row">
-                <div class="col-4"><button id="A" type="button" class="btn btn-wasd">A</button></div>
-                <div class="col-4"><button id="S" type="button" class="btn btn-wasd">S</button></div>
-                <div class="col-4"><button id="D" type="button" class="btn btn-wasd">D</button></div>
+                <div class="col-4">
+                </div>        
+                <button id="W" type="button" class="btn btn-wasd" 
+                            ontouchstart="handleTouch('W', true)" 
+                            ontouchend="handleTouch('W', false)">W</button>
+                </div>
+                <div class="row">
+                    <div class="col-4">
+                    <button id="A" type="button" class="btn btn-wasd" 
+                            ontouchstart="handleTouch('A', true)" 
+                            ontouchend="handleTouch('A', false)">A</button>
+                    </div>
+                <div class="col-4">
+                    <button id="S" type="button" class="btn btn-wasd" 
+                            ontouchstart="handleTouch('S', true)" 
+                            ontouchend="handleTouch('S', false)">S</button>
+                </div>
+                <div class="col-4">
+                    <button id="D" type="button" class="btn btn-wasd" 
+                            ontouchstart="handleTouch('D', true)" 
+                            ontouchend="handleTouch('D', false)">D</button>
+                </div>
             </div>
         </div>
-    </div>
+
+// ---- JavaScript
 <script>
+    // --- Marker initialization ---
     let marker_a = false, marker_w = false, marker_s = false, marker_d = false;
+
+    // --- Buttom initialization ---
     const button_a = document.getElementById("A"), button_w = document.getElementById("W"), button_s = document.getElementById("S"), button_d = document.getElementById("D");
+
+    // --- Text for mode2 ---
     const mode2_text = document.getElementById("mode2_text");
+    
+    // --- wasd pad ---
     const wasd_pad = document.getElementById("wasd_pad");
+    
+    // Mode buttom
     const btn1 = document.getElementById("btn1"), btn2 = document.getElementById("btn2");
 
     let currentMode = 1;
 
+    // --- Try send massage ---
     function sendHttpRequest(url) { 
         fetch(url).catch(err => console.log("Помилка відправки запиту:", err)); 
     }
 
+    // --- Check key and click ---
+    function handleTouch(key, isPressed) {
+    
+    if (event) event.preventDefault(); 
+    
+    if (currentMode != 1) return; 
+
+    let btn = document.getElementById(key);
+    
+    if (isPressed) {
+        // Якщо пальцем натиснули: підсвічуємо кнопку і активуємо маркер
+        if(btn) { btn.style.background = "#7f8183"; btn.style.opacity = "1"; }
+        if (key === 'W') marker_w = true;
+        if (key === 'S') marker_s = true;
+        if (key === 'A') marker_a = true;
+        if (key === 'D') marker_d = true;
+    } else {
+        // Якщо палець підняли: гасимо кнопку і знімаємо маркер
+        if(btn) { btn.style.background = "transparent"; btn.style.opacity = "0.5"; }
+        if (key === 'W') marker_w = false;
+        if (key === 'S') marker_s = false;
+        if (key === 'A') marker_a = false;
+        if (key === 'D') marker_d = false;
+    }
+
+    // Відправляємо оновлену комбінацію на робота
+    sendSignal();
+}
+
+    // --- Change mode ---
     function changeMode(modeNum) {
         currentMode = modeNum;
         if (currentMode === 1) {
@@ -130,6 +191,7 @@ void handleRoot() {
         }
     }
 
+    // --- Send signal ---
     function sendSignal() {
       if (currentMode !== 1) return;
       if(marker_w && marker_a) sendHttpRequest('/cmd?dir=forward_left');
@@ -143,6 +205,7 @@ void handleRoot() {
       else sendHttpRequest('/cmd?dir=stop');
     }
 
+    // --- keydown ---
     document.addEventListener("keydown", function(event) {
         let changed = false;
         if(currentMode === 1) {
@@ -156,6 +219,7 @@ void handleRoot() {
         else if(event.code === "Digit2"){ event.preventDefault(); changeMode(2); }
     });
 
+    // --- keyup ---
     document.addEventListener("keyup", function(event) {
         let changed = false; 
         if(event.code === "KeyW"){ marker_w = false; if(button_w){button_w.style.background = "transparent"; button_w.style.opacity = "0.5";} changed = true; }
