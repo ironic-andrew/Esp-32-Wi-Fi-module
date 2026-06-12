@@ -22,8 +22,8 @@ const int8_t motors[4] = {38, 37, 40, 39};
 */
 
 // ---- mode 1 ---- 
-const char* ssid = "OpenSpace322";
-const char* password = "LAN322LAN";
+const char* ssid = "CSN_317";
+const char* password = "LAN317LAN";
 const char* mqtt_server = "broker.emqx.io";
 const char* topic = "ukraine/esp32/Wi-Fi_module";
 
