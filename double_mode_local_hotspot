@@ -1,0 +1,172 @@
+#include <WiFi.h>
+#include <PubSubClient.h>
+
+#include <Arduino.h>
+#include <U8g2lib.h>
+#include <Wire.h>
+#include <esp_wifi.h>
+
+// ----- display initialization -----
+U8X8_SH1106_128X64_NONAME_HW_I2C u8x8(/* reset=*/ -1, /* clock=*/ 9, /* data=*/ 8);
+
+// ----- type mode -----
+bool mode1 = true;//mode1(default) - manual control
+bool mode2 = false;//mode2 - robot liner
+
+// ----- motors initialization -----
+const int8_t motors[4] = {38, 37, 40, 39};
+/*
+38 - left forward 
+37 - left backward
+40 - right forward
+39 - right backward
+*/
+
+// ---- mode 1 ---- 
+const char* ssid = "CSN_317";
+const char* password = "LAN317LAN";
+const char* mqtt_server = "broker.emqx.io";
+const char* topic = "ukraine/esp32/Wi-Fi_module";
+
+// ---- mode 2 ----
+// --- coefficient ---
+float Kp = 0.15;//0.15
+float Kd = 0.8;//0.8
+float Ki = 0;
+
+// --- formula elements ---
+long integral = 0;
+short lastError = 0;
+uint8_t baseSpeed = 60;
+
+short leftSpeed = 0;
+short rightSpeed = 0;
+
+bool calibrate_marker = true;
+unsigned long lastDisplayTime = 0;
+
+// --- sensors initialization ---
+const int8_t sensors[8] = {4, 5, 6, 7, 10, 11, 13, 12};//pin order is reverse 
+
+// --- max/min --- calibrate ---
+short sensor_max[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+short sensor_min[8] = {10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000};
+
+// --- weight --- sensorsRead ---
+const short weights[8] = {-4000, -3000, -2000, -1000, 1000, 2000, 3000, 4000};
+
+
+// ---- mode1 ----
+WiFiClient espClient;
+PubSubClient client(espClient);
+
+// --- Monitor broker ---
+void callback(char* topic, byte* payload, unsigned int length) {
+  Serial.print("Зловлено сигнал з топіку: ");
+  Serial.println(topic);
+
+  // -- Read catch and read broker masege --
+  String message = "";
+  for (int i = 0; i < length; i++) { 
+    message += (char)payload[i]; 
+  }
+  
+  Serial.print("Текст повідомлення: ");
+  Serial.println(message);
+
+  // -- Check mode --
+  if(message == "mode1"){
+
+    u8x8.clear();
+    mode1 = true;
+    mode2 = false;
+    Serial.println("Обраний <mode1>");
+
+  }else if(message == "mode2"){
+
+    mode2 = true;
+    mode1 = false; 
+    Serial.println("Обраний <mode2>");
+
+  }
+
+  // -- if mode1 --
+  if(mode1){
+  
+  if(message == "forward_left"){
+
+    Serial.println("Команда <forward_left> успішно оброблена!"); 
+    Motors(50, 0, 80, 0);
+
+  }else if(message == "forward_right"){
+
+    Serial.println("Команда <forward_right> успішно оброблена!"); 
+    Motors(80, 0, 50, 0);
+
+  }else if(message == "backward_left"){
+
+    Serial.println("Команда <backward_left> успішно оброблена!"); 
+    Motors(0, 50, 0, 80);
+
+  }else if(message == "backward_right"){
+
+    Serial.println("Команда <backward_right> успішно оброблена!"); 
+    Motors(0, 80, 0, 50);
+
+  }else if(message == "forward"){
+
+    Serial.println("Команда <forward> успішно оброблена!"); 
+    Motors(80, 0, 80, 0);
+
+  }else if(message == "backward"){
+
+    Serial.println("Команда <backward> успішно оброблена!"); 
+    Motors(0, 80, 0, 80);
+
+  }else if(message == "left"){
+
+    Serial.println("Команда <left> успішно оброблена!"); 
+    Motors(0, 00, 80, 0);
+
+  }else if(message == "right"){
+
+    Serial.println("Команда <right> успішно оброблена!"); 
+    Motors(80, 0, 0, 0);
+
+  }else{
+
+    Serial.println("Команда <all_stop> успішно оброблена!"); 
+    Motors(0, 0, 0, 0);
+
+  }
+
+  }
+}
+
+// --- Conection to broker ---
+void reconnect() {
+  while (!client.connected()) {
+    Serial.print("Спроба підключення до MQTT брокера... ");
+    u8x8.clear();
+    u8x8.drawString(0, 3, "Try conection to");
+    u8x8.drawString(3, 5, "Broker");
+    
+    String clientId = "ESP32_Client_" + String(random(0, 10000)); 
+    
+    if (client.connect(clientId.c_str())) {
+      u8x8.clear(); 
+      Serial.println("[УСПІШНО]");
+      client.subscribe(topic); 
+      Serial.print("Підписалися на топік: ");
+      Serial.println(topic);
+      u8x8.drawString(1, 4, "Ready to work!");
+    } else {
+      u8x8.clear();
+      Serial.print("[ПОМИЛКА], код помилки = ");
+      Serial.print(client.state());
+      Serial.println(", повтор через 5 секунд...");
+      u8x8.drawString(0, 4, "Waiting connection...");
+      delay(5000);
+      u8x8.clear();
+    }
+  }
