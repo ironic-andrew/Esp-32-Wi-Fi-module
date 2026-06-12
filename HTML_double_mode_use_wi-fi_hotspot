@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Robot direction</title>
+    <style>
+        body { background-color: #212529; color: #f8f9fa; font-family: system-ui, sans-serif; margin: 0; padding: 0; overflow: hidden; user-select: none; -webkit-user-select: none; }
+        .vh-100 { height: 100vh; display: flex; justify-content: center; align-items: center; position: relative; }
+        .top-bar { position: absolute; top: 0; left: 0; padding: 1rem; display: flex; gap: 0.5rem; z-index: 20; }
+        .btn { background: transparent; color: #f8f9fa; border: 1px solid #6c757d; padding: 0.375rem 0.75rem; font-size: 1rem; border-radius: 0.375rem; cursor: pointer; transition: 0.15s; outline: none; opacity: 0.5; }
+        .btn:active { opacity: 1; }
+        .active-mode { background: #7f8183 !important; opacity: 1 !important; }
+        .container { width: 25%; min-width: 200px; max-width: 450px; display: flex; flex-direction: column; gap: 0.5rem; }
+        .row { display: flex; width: 100%; }
+        .justify-content-center { justify-content: center; }
+        .col-4 { width: 33.3333%; padding: 0 0.25rem; box-sizing: border-box; }
+        .btn-wasd { width: 100%; padding-top: 1.5rem; padding-bottom: 1.5rem; font-size: 2.5rem; display: flex; align-items: center; justify-content: center; }
+        #mode2_text { position: absolute; top: 0; left: 0; width: 100%; height: 100vh; display: none; justify-content: center; align-items: center; font-size: 2rem; color: #dad5d5; pointer-events: none; z-index: 5; background-color: rgba(33, 37, 41, 0.9); text-align: center; }
+    </style>
+</head>
+<body>
+    <div class="vh-100">
+        <!--   --- Mode buttom ---   -->
+        <div class="top-bar">
+            <button id="btn1" type="button" class="btn active-mode" onclick="changeMode(1)">Mode 1</button>
+            <button id="btn2" type="button" class="btn" onclick="changeMode(2)">Mode 2</button>
+        </div>
+        
+        <div id="mode2_text" style="text-shadow: 0px 4px 15px rgba(0, 0, 0, 0.75);">
+            <p style="margin: 20px;"></p>
+        </div>
+        
+
+        <!--   --- wasd_pad ---   -->
+        <div class="container" id="wasd_pad">
+            <!--   --- key wasd ---   -->
+            <div class="row justify-content-center" style="margin-bottom: 0.5rem;">
+                <div class="col-4">
+                </div>        
+                <button id="W" type="button" class="btn btn-wasd" 
+                            ontouchstart="handleTouch('W', true)" 
+                            ontouchend="handleTouch('W', false)">W</button>
+                </div>
+                <div class="row">
+                    <div class="col-4">
+                    <button id="A" type="button" class="btn btn-wasd" 
+                            ontouchstart="handleTouch('A', true)" 
+                            ontouchend="handleTouch('A', false)">A</button>
+                    </div>
+                <div class="col-4">
+                    <button id="S" type="button" class="btn btn-wasd" 
+                            ontouchstart="handleTouch('S', true)" 
+                            ontouchend="handleTouch('S', false)">S</button>
+                </div>
+                <div class="col-4">
+                    <button id="D" type="button" class="btn btn-wasd" 
+                            ontouchstart="handleTouch('D', true)" 
+                            ontouchend="handleTouch('D', false)">D</button>
+                </div>
+            </div>
+        </div>
+
+// ---- JavaScript
+<script>
+    // --- Marker initialization ---
+    let marker_a = false, marker_w = false, marker_s = false, marker_d = false;
+
+    // --- Buttom initialization ---
+    const button_a = document.getElementById("A"), button_w = document.getElementById("W"), button_s = document.getElementById("S"), button_d = document.getElementById("D");
+
+    // --- Text for mode2 ---
+    const mode2_text = document.getElementById("mode2_text");
+    
+    // --- wasd pad ---
+    const wasd_pad = document.getElementById("wasd_pad");
+    
+    // Mode buttom
+    const btn1 = document.getElementById("btn1"), btn2 = document.getElementById("btn2");
+
+    let currentMode = 1;
+
+    // --- Try send massage ---
+    function sendHttpRequest(url) { 
+        fetch(url).catch(err => console.log("Помилка відправки запиту:", err)); 
+    }
+
+    // --- Check key and click ---
+    function handleTouch(key, isPressed) {
+    
+    if (event) event.preventDefault(); 
+    
+    if (currentMode != 1) return; 
+
+    let btn = document.getElementById(key);
+    
+    if (isPressed) {
+        // Якщо пальцем натиснули: підсвічуємо кнопку і активуємо маркер
+        if(btn) { btn.style.background = "#7f8183"; btn.style.opacity = "1"; }
+        if (key === 'W') marker_w = true;
+        if (key === 'S') marker_s = true;
+        if (key === 'A') marker_a = true;
+        if (key === 'D') marker_d = true;
+    } else {
+        // Якщо палець підняли: гасимо кнопку і знімаємо маркер
+        if(btn) { btn.style.background = "transparent"; btn.style.opacity = "0.5"; }
+        if (key === 'W') marker_w = false;
+        if (key === 'S') marker_s = false;
+        if (key === 'A') marker_a = false;
+        if (key === 'D') marker_d = false;
+    }
+
+    // Відправляємо оновлену комбінацію на робота
+    sendSignal();
+}
+
+    // --- Change mode ---
+    function changeMode(modeNum) {
+        currentMode = modeNum;
+        if (currentMode === 1) {
+            btn1.classList.add("active-mode");
+            btn2.classList.remove("active-mode");
+            wasd_pad.style.display = "flex";
+            mode2_text.style.display = "none";
+            sendHttpRequest('/mode1');
+        } else if (currentMode === 2) {
+            btn2.classList.add("active-mode");
+            btn1.classList.remove("active-mode");
+            wasd_pad.style.display = "none";
+            mode2_text.style.display = "flex";
+            sendHttpRequest('/mode2');
+        }
+    }
+
+    // --- Send signal ---
+    function sendSignal() {
+      if (currentMode !== 1) return;
+      if(marker_w && marker_a) sendHttpRequest('/cmd?dir=forward_left');
+      else if(marker_w && marker_d) sendHttpRequest('/cmd?dir=forward_right');
+      else if(marker_s && marker_a) sendHttpRequest('/cmd?dir=backward_left');
+      else if(marker_s && marker_d) sendHttpRequest('/cmd?dir=backward_right');
+      else if(marker_w) sendHttpRequest('/cmd?dir=forward');
+      else if(marker_s) sendHttpRequest('/cmd?dir=backward');
+      else if(marker_a) sendHttpRequest('/cmd?dir=left');
+      else if(marker_d) sendHttpRequest('/cmd?dir=right');
+      else sendHttpRequest('/cmd?dir=stop');
+    }
+
+    // --- keydown ---
+    document.addEventListener("keydown", function(event) {
+        let changed = false;
+        if(currentMode === 1) {
+            if(event.code === "KeyW" && !marker_w){ marker_w = true; button_w.style.background = "#7f8183"; button_w.style.opacity = "1"; event.preventDefault(); changed = true; }
+            if(event.code === "KeyS" && !marker_s){ marker_s = true; button_s.style.background = "#7f8183"; button_s.style.opacity = "1"; event.preventDefault(); changed = true; }
+            if(event.code === "KeyA" && !marker_a){ marker_a = true; button_a.style.background = "#7f8183"; button_a.style.opacity = "1"; event.preventDefault(); changed = true; }
+            if(event.code === "KeyD" && !marker_d){ marker_d = true; button_d.style.background = "#7f8183"; button_d.style.opacity = "1"; event.preventDefault(); changed = true; }
+            if(changed) sendSignal();
+        }
+        if(event.code === "Digit1"){ event.preventDefault(); changeMode(1); }
+        else if(event.code === "Digit2"){ event.preventDefault(); changeMode(2); }
+    });
+
+    // --- keyup ---
+    document.addEventListener("keyup", function(event) {
+        let changed = false; 
+        if(event.code === "KeyW"){ marker_w = false; if(button_w){button_w.style.background = "transparent"; button_w.style.opacity = "0.5";} changed = true; }
+        if(event.code === "KeyS"){ marker_s = false; if(button_s){button_s.style.background = "transparent"; button_s.style.opacity = "0.5";} changed = true; }
+        if(event.code === "KeyA"){ marker_a = false; if(button_a){button_a.style.background = "transparent"; button_a.style.opacity = "0.5";} changed = true; }
+        if(event.code === "KeyD"){ marker_d = false; if(button_d){button_d.style.background = "transparent"; button_d.style.opacity = "0.5";} changed = true; }
+        if(changed) sendSignal();
+    });
+</script>
+</body>
+</html>
