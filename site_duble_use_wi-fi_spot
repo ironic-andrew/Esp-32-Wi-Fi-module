@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <style>
+
+        .buttom1{
+
+            display: flex;
+            justify-content: center; 
+            align-items: center;    
+            width: 900;
+            height:  500;
+
+        }
+
+
+    </style>
+
+    <style>
+    
+    .btn-wasd {
+      width: 100%;
+      
+      aspect-ratio: 1 / 1; 
+      
+      font-size: calc(1rem + 0.8vw); 
+      font-weight: bold;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 8px;
+    }
+    
+    
+    .joystick-container {
+      width: 20vw;        
+      min-width: 130px;   
+      max-width: w00px;   
+    }
+  </style>
+</style>
+
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
+<title>Robot diraction</title>
+</head>
+<body class="bg-dark text-light">
+
+    <div class="d-flex justify-content-center align-items-center vh-100">
+    
+        <div class="position-absolute top-0 start-0 p-3 d-flex gap-2">
+        <button id="btn1" style = "background: #7f8183" type="button" class="btn btn-outline-light opacity-50 opacity-100-down border-secondary shadow-none">
+          Mode 2
+        </button>
+        <button id="btn2" type="button" class="btn btn-outline-light opacity-50 opacity-100-down border-secondary shadow-none">
+          Mode 2
+        </button>
+        </div>
+
+  <div id="mode2_text" class="d-flex justify-content-center align-items-center fs-1 w-100 position-absolute" style="display: none !important; color: #8d8f92; height: 100vh; pointer-events: none;">
+    <p class="m-0">Увімкнено режим їздою за лінією</p>
+  </div>
+
+  <div class="container w-25" style="min-width: 200px; max-width: 450px;">
+
+    <div class="row g-2 mb-2 justify-content-center">
+      <div class="col-4">
+        <button id="W" type="button" class="btn btn-outline-light w-100 py-4 fs-1 opacity-50 opacity-100-down border-secondary shadow-none">
+          W
+        </button>
+      </div>
+    </div>
+    
+    <div class="row g-2">
+      <div class="col-4">
+        <button id="A" type="button" class="btn btn-outline-light w-100 py-4 fs-1 opacity-50 opacity-100-down border-secondary shadow-none">
+          A
+        </button>
+      </div>
+      <div class="col-4">
+        <button id="S" type="button" class="btn btn-outline-light w-100 py-4 fs-1 opacity-50 opacity-100-down border-secondary shadow-none">
+          S
+        </button>
+      </div>
+      <div class="col-4">
+        <button id="D" type="button" class="btn btn-outline-light w-100 py-4 fs-1 opacity-50 opacity-100-down border-secondary shadow-none">
+          D
+        </button>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+
+<!-- Ініціалізація брокера   -->
+<script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+<script>
+
+const client = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
+
+  client.on('connect', () => {
+      console.log('Підключено до MQTT брокера!');
+  });
+
+</script>
+
+<script>
+    //marker initialization
+    let marker_a = false;
+    let marker_w = false;
+    let marker_s = false;
+    let marker_d = false;
+
+    //buttom initialization
+    const button_a = document.getElementById("A");
+    const button_w = document.getElementById("W");
+    const button_s = document.getElementById("S");
+    const button_d = document.getElementById("D");
+
+    const mode2_text = document.getElementById("mode2_text");
+    
+    let mode_1 = false;
+    let mode_2 = false;
+
+    const button_mode_1 = document.getElementById("btn1");
+    const button_mode_2 = document.getElementById("btn2");
+
+
+
+    //direction checker
+    function sendSignal() {
+      if(marker_w && marker_a){
+
+        client.publish('ukraine/esp32/Wi-Fi_module', 'forward_left');
+        console.log("Сигнал <forward_left> надіслано в хмару");
+
+      }else if(marker_w && marker_d){
+
+        client.publish('ukraine/esp32/Wi-Fi_module', 'forward_right');
+        console.log("Сигнал <forward_right> надіслано в хмару");
+
+      }else if(marker_s && marker_a){
+
+        client.publish('ukraine/esp32/Wi-Fi_module', 'backward_left');
+        console.log("Сигнал <backward_left> надіслано в хмару");
+
+      }else if(marker_s && marker_d){
+
+        client.publish('ukraine/esp32/Wi-Fi_module', 'backward_right');
+        console.log("Сигнал <backward_right> надіслано в хмару");
+
+      }else if(marker_w){
+
+        client.publish('ukraine/esp32/Wi-Fi_module', 'forward');
+        console.log("Сигнал <forward> надіслано в хмару");
+
+      }else if(marker_s){
+
+        client.publish('ukraine/esp32/Wi-Fi_module', 'backward');
+        console.log("Сигнал <backward> надіслано в хмару");
+
+      }else if(marker_a){
+
+        client.publish('ukraine/esp32/Wi-Fi_module', 'left');
+        console.log("Сигнал <left> надіслано в хмару");
+
+      }else if(marker_d){
+
+        client.publish('ukraine/esp32/Wi-Fi_module', 'right');
+        console.log("Сигнал <right> надіслано в хмару");
+
+      }else if(marker_w && marker_s){
+
+        client.publish('ukraine/esp32/Wi-Fi_module', 'all_stop');
+        console.log("Конфлікт <forward> і <backward> надіслано в хмару");
+
+      }else if(marker_a && marker_d){
+
+        client.publish('ukraine/esp32/Wi-Fi_module', 'all_stop');
+        console.log("Конфлікт <left> і <right> надіслано в хмару");
+
+      }else{
+
+        client.publish('ukraine/esp32/Wi-Fi_module', 'all_stop');
+        console.log("Сигнал <all_stop> надіслано в хмару");
+
+      }
+      
+
+    }
+
+    function sendSignalMode() {
+
+        if(mode_1){
+
+            client.publish('ukraine/esp32/Wi-Fi_module', 'mode1');
+            console.log("Сигнал <mode1> надіслано в хмару");
+            button_a.style.display = "block";
+            button_w.style.display = "block";
+            button_d.style.display = "block";
+            button_s.style.display = "block";
+
+            mode2_text.style.setProperty('display', 'none', 'important');
+
+        }else if(mode_2){
+
+            client.publish('ukraine/esp32/Wi-Fi_module', 'mode2');
+            console.log("Сигнал <mode2> надіслано в хмару");
+            button_a.style.display = "none";
+            button_w.style.display = "none";
+            button_d.style.display = "none";
+            button_s.style.display = "none";
+            
+            mode2_text.style.setProperty('display', 'flex', 'important');
+
+        }else{
+
+            client.publish('ukraine/esp32/Wi-Fi_module', 'mode1');
+            console.log("Сигнал <mode1_default> надіслано в хмару");
+
+
+        }
+
+    }
+
+    //Keydown checker    
+    document.addEventListener("keydown", function(event) {
+        let changed = false;
+        
+
+        if(event.code === "KeyW" && !marker_w){
+            marker_w = true;
+            if(button_w) button_w.style.background = "#7f8183";
+            event.preventDefault();
+            changed = true;
+        }
+
+        if(event.code === "KeyS" && !marker_s){
+            marker_s = true;
+            if(button_s) button_s.style.background = "#7f8183";
+            event.preventDefault();
+            changed = true;
+        }
+
+        if(event.code === "KeyA" && !marker_a){
+            marker_a = true;
+            if(button_a) button_a.style.background = "#7f8183";
+            event.preventDefault();
+            changed = true;
+        }
+
+        if(event.code === "KeyD" && !marker_d){
+            marker_d = true;
+            if(button_d) button_d.style.background = "#7f8183";
+            event.preventDefault();
+            changed = true;
+        }
+
+        if(changed){
+
+            sendSignal();
+
+        }
+
+        if(event.code === "Digit1"){
+            mode_1 = true;
+            mode_2 = false;
+            if(button_mode_1) {
+                button_mode_1.style.background = "#7f8183";
+                button_mode_2.style.background = "#212529";
+            }
+            console.log("key1 натиснута");
+            event.preventDefault();
+            sendSignalMode();
+            
+        }else  if(event.code === "Digit2"){
+            mode_2 = true;
+            mode_1 = false;
+            if(button_mode_2) {
+                button_mode_1.style.background = "#212529";
+                button_mode_2.style.background = "#7f8183";
+            }
+            console.log("key2 натиснута");
+            event.preventDefault();
+            sendSignalMode();
+
+        }
+
+        
+    });
+
+    //Keyup checker
+    document.addEventListener("keyup", function(event) {
+        let changed = false; 
+        let chenged_mode = false; 
+
+        if(event.code === "KeyW"){
+            marker_w = false;
+            if(button_w) button_w.style.background = "#212529";
+            changed = true;
+        }
+
+        if(event.code === "KeyS"){
+            marker_s = false;
+            if(button_s) button_s.style.background = "#212529";
+            changed = true;
+        }
+
+        if(event.code === "KeyA"){
+            marker_a = false;
+            if(button_a) button_a.style.background = "#212529";
+            changed = true;
+        }
+
+        if(event.code === "KeyD"){
+            marker_d = false;
+            if(button_d) button_d.style.background = "#212529";
+            changed = true;
+        }
+
+        if(changed){
+
+            sendSignal();
+
+        }
+
+        
+
+    });
+
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous"></script>
+</body>
+</html>
