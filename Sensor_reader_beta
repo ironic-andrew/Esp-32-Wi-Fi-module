@@ -1,1 +1,280 @@
 
+#include <WiFi.h>
+#include <WebServer.h>
+#include "time.h"
+
+#include <Arduino.h>
+#include <Wire.h>
+#include <esp_wifi.h>
+
+#include "Adafruit_VL53L0X.h"
+
+Adafruit_VL53L0X lox = Adafruit_VL53L0X();
+
+// Fixed Hardware Platform Pins
+#define TRIG_PIN 3
+#define ECHO_PIN 1
+
+// Target I2C addresses from your scanner results
+#define IMU_ADDRESS 0x28 
+#define LASER_ADDRESS 0x29
+
+WebServer server(80);
+
+// Smooth Filtering
+float smoothX = 0.0, smoothY = 0.0;
+float offsetX = 0.0, offsetY = 0.0;
+
+void handleRoot();
+void handleSyncTime();
+void handleGetLiveValues();
+
+void connection(){
+  WiFi.disconnect(true);
+  WiFi.mode(WIFI_AP);
+  delay(100);
+
+  uint8_t protocol_bitmap = WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G | WIFI_PROTOCOL_11N;
+  esp_wifi_set_protocol(WIFI_IF_AP, protocol_bitmap);
+  esp_wifi_set_bandwidth(WIFI_IF_AP, WIFI_BW_HT20); 
+  
+  #if defined(ESP_IDF_VERSION_MAJOR) && ESP_IDF_VERSION_MAJOR >= 4
+    esp_wifi_set_ps(WIFI_PS_NONE); 
+  #endif
+
+  WiFi.softAP("esp32", "20332077", 6, 0, 4);
+  
+  server.on("/", handleRoot);
+  server.on("/sync-time", handleSyncTime);
+  server.on("/api/data", handleGetLiveValues); 
+  
+  server.begin();
+}
+
+float getSensorDistance() {
+  digitalWrite(TRIG_PIN, LOW);
+  delayMicroseconds(2); 
+  digitalWrite(TRIG_PIN, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(TRIG_PIN, LOW);
+  
+  long duration = pulseIn(ECHO_PIN, HIGH, 15000); 
+  if (duration <= 0 || duration > 25000) return -1.0; 
+  
+  float distanceCm = duration * 0.0343 / 2.0;
+  if (distanceCm < 2.0 || distanceCm > 400.0) return -1.0;
+  return distanceCm;
+}
+
+float getSensorDistance_laser(){
+  VL53L0X_RangingMeasurementData_t measure;
+  lox.rangingTest(&measure, false);
+  
+  if (measure.RangeStatus == 0) {
+    float result = (float)measure.RangeMilliMeter / 10.0;
+    if(result <= 0.5 || result > 150.0) return -1.0; 
+    return result;
+  } else {
+    return -1.0;
+  }
+}
+
+
+bool readAbsoluteIMU(float &x, float &y, float &z) {
+  Wire.beginTransmission(IMU_ADDRESS);
+  
+  Wire.write(0x08); 
+  if (Wire.endTransmission(false) != 0) return false;
+
+  if (Wire.requestFrom(IMU_ADDRESS, 6) != 6) return false;
+
+  
+  int16_t raw_x = (Wire.read() | (Wire.read() << 8));
+  int16_t raw_y = (Wire.read() | (Wire.read() << 8));
+  int16_t raw_z = (Wire.read() | (Wire.read() << 8));
+
+  
+  x = (float)raw_x / 100.0;
+  y = (float)raw_y / 100.0;
+  z = (float)raw_z / 100.0;
+  return true;
+}
+
+String getIMUOrientation(){
+  float rawX = 0, rawY = 0, rawZ = 0;
+  float threshold = 0.25; 
+  String position = "Stable / Flat";
+
+  if (readAbsoluteIMU(rawX, rawY, rawZ)) {
+    float calX = rawX - offsetX;
+    float calY = rawY - offsetY;
+    
+   
+    smoothX = (smoothX * 0.7) + (calX * 0.3);
+    smoothY = (smoothY * 0.7) + (calY * 0.3);
+    
+    if (abs(smoothX) > abs(smoothY)) {
+      if (smoothX > threshold)       position = "Collision Left";
+      else if (smoothX < -threshold) position = "Collision Right";
+    } else {
+      if (smoothY > threshold)       position = "Collision Front";
+      else if (smoothY < -threshold) position = "Collision Back";
+    }
+  } else {
+    position = "IMU Sensor Offline";
+  }
+  return position;
+}
+
+String getLiveDateString() {
+  struct tm timeinfo;
+  if(!getLocalTime(&timeinfo)) return "Time Not Set Yet (Syncing...)";
+  char dateBuffer[30]; 
+  strftime(dateBuffer, sizeof(dateBuffer), "%Y-%m-%d %H:%M:%S", &timeinfo);
+  return String(dateBuffer);
+}
+
+const char HTML_TEMPLATE[] PROGMEM = R"=====(
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name='viewport' content='width=device-width, initial-scale=1'>
+    <title>ESP32 Real-Time Dashboard</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; margin-top: 30px; background: #f4f4f9; color: #333; transition: background 0.3s; }
+        .card { background: white; padding: 25px; display: inline-block; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); min-width: 300px; }
+        h1 { color: #222; font-size: 1.8rem; margin-bottom: 25px; }
+        .data-title { font-size: 0.9rem; color: #666; text-transform: uppercase; margin-top: 15px; margin-bottom: 2px; }
+        .data-box { font-size: 1.6rem; color: #007bff; font-weight: bold; margin-bottom: 20px; }
+        .sensor-box { font-size: 2rem; font-weight: bold; margin-bottom: 5px; padding: 10px; border-radius: 8px; transition: background 0.3s, color 0.3s; }
+        .normal-box { background: #eef9f0; color: #28a745; }
+        .laser-box { background: #fdf2f7; color: #e83e8c; }
+        .stable-gyro { background: #f8f9fa; color: #495057; }
+        .alert-gyro { background: #dc3545; color: white; animation: blinker 1s linear infinite; }
+        @keyframes blinker { 50% { opacity: 0.7; } }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>ESP32 Telemetry</h1>
+        <div class="data-title">HC-SR04 Distance</div>
+        <div class="sensor-box normal-box" id="distance-hc">%DISTANCE_HC% cm</div>
+        <div class="data-title">VL53L0X Laser Distance</div>
+        <div class="sensor-box laser-box" id="distance-laser">%DISTANCE_GY% cm</div>
+        <div class="data-title">Orientation / Collision Status</div>
+        <div class="sensor-box stable-gyro" id="gyro-status">%GIROSCOPE%</div>
+        <div class="data-title">System Date & Time</div>
+        <div class="data-box" id="time-value">%LIVE_DATE%</div>
+    </div>
+    <script>
+    window.onload = function() {
+        let epochTime = Math.floor(Date.now() / 1000);
+        fetch('/sync-time?epoch=' + epochTime);
+    };
+    setInterval(function() {
+        fetch('/api/data')
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('distance-hc').innerText = data.distance_hc + (data.distance_hc == "Out of Range" ? "" : " cm");
+            document.getElementById('distance-laser').innerText = data.distance_laser + (data.distance_laser == "Out of Range" ? "" : " cm");
+            document.getElementById('time-value').innerText = data.datetime;
+            let gyroElement = document.getElementById('gyro-status');
+            gyroElement.innerText = data.position;
+            if (data.position.includes("Collision")) {
+                gyroElement.className = "sensor-box alert-gyro";
+                document.body.style.background = "#fcdbde";
+            } else {
+                gyroElement.className = "sensor-box stable-gyro";
+                document.body.style.background = "#f4f4f9";
+            }
+        });
+    }, 1000); 
+    </script>
+</body>
+</html>
+)=====";
+
+void handleRoot() {
+  String htmlResponse = String(HTML_TEMPLATE);
+  float distance = getSensorDistance();
+  float distance_laser = getSensorDistance_laser();
+  String distanceStr = (distance < 0) ? "Out of Range" : String(distance, 1);
+  String distanceStr_laser = (distance_laser < 0) ? "Out of Range" : String(distance_laser, 1);
+  String position = getIMUOrientation();
+  
+  htmlResponse.replace("%LIVE_DATE%", getLiveDateString());
+  htmlResponse.replace("%DISTANCE_HC%", distanceStr);
+  htmlResponse.replace("%DISTANCE_GY%", distanceStr_laser);
+  htmlResponse.replace("%GIROSCOPE%", position);
+  server.send(200, "text/html", htmlResponse);
+}
+
+void handleGetLiveValues() {
+  float distance = getSensorDistance();
+  float distance_laser = getSensorDistance_laser();
+  String distanceStr = (distance < 0) ? "Out of Range" : String(distance, 1);
+  String distanceStr_laser = (distance_laser < 0) ? "Out of Range" : String(distance_laser, 1);
+  String position = getIMUOrientation();
+  
+  String json = "{";
+  json += "\"distance_hc\":\"" + distanceStr + "\",";
+  json += "\"distance_laser\":\"" + distanceStr_laser + "\",";
+  json += "\"position\":\"" + position + "\",";
+  json += "\"datetime\":\"" + getLiveDateString() + "\"";
+  json += "}";
+  server.send(200, "application/json", json);
+}
+
+void handleSyncTime() {
+  if (server.hasArg("epoch")) {
+    long long epoch = server.arg("epoch").toInt();
+    struct timeval tv;
+    tv.tv_sec = epoch;
+    tv.tv_usec = 0;
+    settimeofday(&tv, NULL);
+    server.send(200, "text/plain", "OK");
+  } else {
+    server.send(400, "text/plain", "Bad Request");
+  }
+}
+
+void setup() {
+  delay(1000); 
+  
+  pinMode(TRIG_PIN, OUTPUT);
+  digitalWrite(TRIG_PIN, LOW);
+  pinMode(ECHO_PIN, INPUT);
+  
+  
+  Wire.begin(8, 9); 
+  Wire.setClock(100000); 
+  delay(200);
+
+  
+  float sumX = 0, sumY = 0, rawX, rawY, rawZ;
+  int validSamples = 0;
+  
+  for (int i = 0; i < 30; i++) {
+    if (readAbsoluteIMU(rawX, rawY, rawZ)) {
+      sumX += rawX;
+      sumY += rawY;
+      validSamples++;
+    }
+    delay(15);
+  }
+  if (validSamples > 0) {
+    offsetX = sumX / (float)validSamples;
+    offsetY = sumY / (float)validSamples;
+  }
+  
+  delay(100); 
+
+  // 2. Initialize Laser Sensor explicitly targeted to Hex Address 0x29
+  lox.begin(0x29, false, &Wire); 
+  
+  connection();
+}
+
+void loop() {
+  server.handleClient();
+}
