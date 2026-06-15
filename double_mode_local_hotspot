@@ -2,7 +2,7 @@
 I2C device found at address 0x28  ! 9-axis Absolute Orientation IMU
 I2C device found at address 0x29  ! Flight Distance Ranging Sensor 
 I2C device found at address 0x3C  ! display
-I2C device found at address 0x68  ! imo??
+I2C device found at address 0x68  ! imo?? 1PCS MPU9250 + BMP280 10DOF Sensor Module (GY-91): 9-Axis Acceleration, Gyroscope, Compass with SPI/I2C – 3-5V for Arduino
 I2C device found at address 0x76  ! barometer
 */
 
