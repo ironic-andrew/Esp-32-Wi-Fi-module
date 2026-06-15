@@ -1,1 +1,216 @@
 
+#include <WiFi.h>
+#include <WebServer.h>
+#include "time.h"
+
+#include <Arduino.h>
+#include <U8g2lib.h>
+#include <Wire.h>
+#include <esp_wifi.h>
+
+#include "Adafruit_VL53L0X.h"
+
+Adafruit_VL53L0X lox = Adafruit_VL53L0X();
+
+// Safe Pin Definitions (Explicitly matches your new wiring)
+#define TRIG_PIN 3
+#define ECHO_PIN 1
+
+WebServer server(80);
+
+void handleRoot();
+void handleSyncTime();
+void handleGetLiveValues();
+
+void connection(){
+  WiFi.disconnect(true);
+  WiFi.mode(WIFI_AP);
+  delay(100);
+
+  uint8_t protocol_bitmap = WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G | WIFI_PROTOCOL_11N;
+  esp_wifi_set_protocol(WIFI_IF_AP, protocol_bitmap);
+  esp_wifi_set_bandwidth(WIFI_IF_AP, WIFI_BW_HT20); 
+  
+  #if defined(ESP_IDF_VERSION_MAJOR) && ESP_IDF_VERSION_MAJOR >= 4
+    esp_wifi_set_ps(WIFI_PS_NONE); 
+  #endif
+
+  bool ap_status = WiFi.softAP("esp32", "20332077", 6, 0, 4);
+  
+  if(ap_status) {
+    Serial.println("AP launched and VISIBLE.");
+  } else {
+    Serial.println("AP failed to launch.");
+  }
+  
+  server.on("/", handleRoot);
+  server.on("/sync-time", handleSyncTime);
+  server.on("/api/data", handleGetLiveValues); 
+  
+  server.begin();
+  Serial.print("Web Server started on IP: ");
+  Serial.println(WiFi.softAPIP());
+}
+
+// Improved Ultrasonic function with explicit hardware cleanup
+float getSensorDistance() {
+  digitalWrite(TRIG_PIN, LOW);
+  delayMicroseconds(5);
+  digitalWrite(TRIG_PIN, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(TRIG_PIN, LOW);
+  
+  // 30000 microseconds = 30ms timeout (~5 meters max range)
+  long duration = pulseIn(ECHO_PIN, HIGH, 30000); 
+  
+  if (duration <= 0 || duration > 35000) {
+    return -1.0; 
+  }
+  
+  float distanceCm = duration * 0.0343 / 2.0;
+  
+  // Sanity check for faulty readings
+  if (distanceCm < 2.0 || distanceCm > 400.0) {
+    return -1.0;
+  }
+  return distanceCm;
+}
+
+// Improved Laser Function with Status Logging
+float getSensorDistance_laser(){
+  VL53L0X_RangingMeasurementData_t measure;
+  lox.rangingTest(&measure, false);
+  
+  // Status 0 means a valid laser return reflection trace profile
+  if (measure.RangeStatus == 0) {
+    return (float)measure.RangeMilliMeter / 10.0; 
+  } else {
+    return -1.0;
+  }
+}
+
+String getLiveDateString() {
+  struct tm timeinfo;
+  if(!getLocalTime(&timeinfo)) {
+    return "Time Not Set Yet (Syncing...)";
+  }
+  char dateBuffer[30];
+  strftime(dateBuffer, sizeof(dateBuffer), "%Y-%m-%d %H:%M:%S", &timeinfo);
+  return String(dateBuffer);
+}
+
+const char HTML_TEMPLATE[] PROGMEM = R"=====(
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name='viewport' content='width=device-width, initial-scale=1'>
+    <title>ESP32 Real-Time Dashboard</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; background: #f4f4f9; color: #333; }
+        .card { background: white; padding: 25px; display: inline-block; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); min-width: 280px; }
+        h1 { color: #222; font-size: 1.8rem; margin-bottom: 25px; }
+        .data-title { font-size: 0.9rem; color: #666; text-transform: uppercase; margin-top: 15px; margin-bottom: 2px; }
+        .data-box { font-size: 1.6rem; color: #007bff; font-weight: bold; margin-bottom: 20px; }
+        .sensor-box { font-size: 2rem; font-weight: bold; margin-bottom: 5px; }
+        .hc-color { color: #28a745; }
+        .laser-color { color: #e83e8c; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>ESP32 Telemetry</h1>
+        
+        <div class="data-title">HC-SR04 Distance</div>
+        <div class="sensor-box hc-color" id="distance-hc">%DISTANCE_HC% cm</div>
+        
+        <div class="data-title">VL53L0X Laser Distance</div>
+        <div class="sensor-box laser-color" id="distance-laser">%DISTANCE_GY% cm</div>
+        
+        <div class="data-title">System Date & Time</div>
+        <div class="data-box" id="time-value">%LIVE_DATE%</div>
+    </div>
+
+    <script>
+    window.onload = function() {
+        let epochTime = Math.floor(Date.now() / 1000);
+        fetch('/sync-time?epoch=' + epochTime);
+    };
+
+    setInterval(function() {
+        fetch('/api/data')
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('distance-hc').innerText = data.distance_hc + (data.distance_hc === "Out of Range" ? "" : " cm");
+            document.getElementById('distance-laser').innerText = data.distance_laser + (data.distance_laser === "Out of Range" ? "" : " cm");
+            document.getElementById('time-value').innerText = data.datetime;
+        });
+    }, 1000); 
+    </script>
+</body>
+</html>
+)=====";
+
+void handleRoot() {
+  String htmlResponse = String(HTML_TEMPLATE);
+  float distance = getSensorDistance();
+  float distance_laser = getSensorDistance_laser();
+  String distanceStr = (distance < 0) ? "Out of Range" : String(distance, 1);
+  String distanceStr_laser = (distance_laser < 0) ? "Out of Range" : String(distance_laser, 1);
+  
+  htmlResponse.replace("%LIVE_DATE%", getLiveDateString());
+  htmlResponse.replace("%DISTANCE_HC%", distanceStr);
+  htmlResponse.replace("%DISTANCE_GY%", distanceStr_laser);
+  server.send(200, "text/html", htmlResponse);
+}
+
+void handleGetLiveValues() {
+  float distance = getSensorDistance();
+  float distance_laser = getSensorDistance_laser();
+  String distanceStr = (distance < 0) ? "Out of Range" : String(distance, 1);
+  String distanceStr_laser = (distance_laser < 0) ? "Out of Range" : String(distance_laser, 1);
+  
+  String json = "{";
+  json += "\"distance_hc\":\"" + distanceStr + "\",";
+  json += "\"distance_laser\":\"" + distanceStr_laser + "\",";
+  json += "\"datetime\":\"" + getLiveDateString() + "\"";
+  json += "}";
+  server.send(200, "application/json", json);
+}
+
+void handleSyncTime() {
+  if (server.hasArg("epoch")) {
+    long long epoch = server.arg("epoch").toInt();
+    struct timeval tv;
+    tv.tv_sec = epoch;
+    tv.tv_usec = 0;
+    settimeofday(&tv, NULL);
+    server.send(200, "text/plain", "OK");
+  } else {
+    server.send(400, "text/plain", "Bad Request");
+  }
+}
+
+void setup() {
+  Serial.begin(115200);
+  delay(500); 
+  
+  // Force clean startup values for pins
+  pinMode(TRIG_PIN, OUTPUT);
+  digitalWrite(TRIG_PIN, LOW);
+  pinMode(ECHO_PIN, INPUT);
+  
+  // Explicitly assign Standard SDA (8) and SCL (9) pins for I2C
+  Wire.begin(8 , 9); 
+  
+  if (!lox.begin()) {
+    Serial.println(F("CRITICAL ERROR: VL53L0X Laser wire issue or broken sensor hardware!"));
+  } else {
+    Serial.println(F("SUCCESS: VL53L0X Laser Found."));
+  }
+  
+  connection();
+}
+
+void loop() {
+  server.handleClient();
+}
