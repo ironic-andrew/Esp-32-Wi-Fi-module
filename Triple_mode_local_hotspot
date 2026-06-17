@@ -1,0 +1,1090 @@
+/*
+I2C device found at address 0x28  ! 9-axis Absolute Orientation IMU(BNO055)
+I2C device found at address 0x29  ! Flight Distance Ranging Sensor 
+I2C device found at address 0x3C  ! display(SH1106)
+I2C device found at address 0x68  ! 9-axis Absolute Orientation with 32 bit microcontroler(MPU9250)
+I2C device found at address 0x76  ! barometer
+*/
+
+#include <WiFi.h>
+#include <WebServer.h>
+#include "time.h"
+
+#include <Arduino.h>
+#include <Wire.h>
+#include <U8x8lib.h>
+#include <esp_wifi.h>
+
+#include <Adafruit_BMP280.h> 
+
+#include "Adafruit_VL53L0X.h"
+
+#include <Adafruit_Sensor.h>
+#include <Adafruit_BNO055.h>
+#include <utility/matrix.h>
+
+
+// ---- Device initializetion ---->
+Adafruit_BMP280 bmp;
+
+Adafruit_BNO055 bno = Adafruit_BNO055(55, 0x28, &Wire);
+
+Adafruit_VL53L0X lox = Adafruit_VL53L0X();
+
+U8X8_SH1106_128X64_NONAME_HW_I2C u8x8(/* reset=*/ U8X8_PIN_NONE);
+
+#define TRIG_PIN 3
+#define ECHO_PIN 1
+
+#define IMU_ADDRESS 0x68 
+#define LASER_ADDRESS 0x29
+// --------------
+
+// ----- Mode3 ----->
+// ---- Variable initialization ---->
+float smoothX = 0.0, smoothY = 0.0;
+float offsetX = 0.0, offsetY = 0.0;
+// ----------
+// --------------
+
+// ----- type mode ----->
+volatile bool mode1 = true; 
+volatile bool mode2 = false;
+volatile bool mode3 = false;
+// --------------
+
+// ----- motors initialization ----->
+const int8_t motors[4] = {38, 37, 40, 39};
+// --------------
+
+// ----- Web Server initialization ----->
+WebServer server(80);
+// --------------
+
+// ----- mode 2 ----->
+// --- element initialization --->
+float Kp = 0.15;
+float Kd = 0.8;
+float Ki = 0;
+
+long integral = 0;
+short lastError = 0;
+uint8_t baseSpeed = 60;
+
+short leftSpeed = 0;
+short rightSpeed = 0;
+
+bool calibrate_marker = true;
+unsigned long lastDisplayTime = 0;
+// ----------
+
+// --- sensors initialization --->
+const int8_t sensors[8] = {4, 5, 6, 7, 10, 11, 13, 12};
+// ----------
+
+// --- max/min --- calibrate --->
+short sensor_max[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+short sensor_min[8] = {10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000};
+// ----------
+
+// --- weight --- sensorsRead --->
+const short weights[8] = {-4000, -3000, -2000, -1000, 1000, 2000, 3000, 4000};
+// ----------
+// --------------
+
+// ---- Apply motors for mode1 ---->
+void Motors(int moto1_forward, int moto1_backward, int moto2_forward, int moto2_backward){
+  analogWrite(motors[0], moto1_forward);
+  analogWrite(motors[1], moto1_backward);
+  analogWrite(motors[2], moto2_forward);
+  analogWrite(motors[3], moto2_backward);
+}
+// ------------
+
+// ---- HTML interface ---->
+void handleRoot() {
+  String html = R"=====(
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Robot Control & Telemetry</title>
+    <style>
+        body { background-color: #212529; color: #f8f9fa; font-family: system-ui, sans-serif; margin: 0; padding: 0; overflow-x: hidden; user-select: none; -webkit-user-select: none; transition: background 0.3s; }
+        .vh-100 { min-height: 100vh; display: flex; justify-content: center; align-items: center; position: relative; padding: 60px 10px 20px 10px; box-sizing: border-box; }
+        .top-bar { position: absolute; top: 0; left: 0; padding: 1rem; display: flex; gap: 0.5rem; z-index: 20; }
+        .btn { background: transparent; color: #f8f9fa; border: 1px solid #6c757d; padding: 0.375rem 0.75rem; font-size: 1rem; border-radius: 0.375rem; cursor: pointer; transition: 0.15s; outline: none; opacity: 0.5; }
+        .btn:active { opacity: 1; }
+        .active-mode { background: #7f8183 !important; opacity: 1 !important; }
+        .container { width: 25%; min-width: 200px; max-width: 450px; display: flex; flex-direction: column; gap: 0.5rem; }
+        .row { display: flex; width: 100%; }
+        .justify-content-center { justify-content: center; }
+        .col-4 { width: 33.3333%; padding: 0 0.25rem; box-sizing: border-box; }
+        .btn-wasd { width: 100%; padding-top: 1.5rem; padding-bottom: 1.5rem; font-size: 2.5rem; display: flex; align-items: center; justify-content: center; }
+        #mode2_text { position: absolute; top: 0; left: 0; width: 100%; height: 100vh; display: none; justify-content: center; align-items: center; font-size: 2rem; color: #dad5d5; pointer-events: none; z-index: 5; background-color: rgba(33, 37, 41, 0.9); text-align: center; }
+        
+        /* --- Стилі для Mode 3 (Телеметрія) --- */
+        #telemetry_panel { display: none; width: 100%; max-width: 500px; background: #2c3034; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); margin: auto; text-align: center; box-sizing: border-box; }
+        h1 { color: #f8f9fa; font-size: 1.5rem; margin-top: 0; margin-bottom: 20px; }
+        .data-title { font-size: 0.8rem; color: #a8aeb4; text-transform: uppercase; margin-top: 12px; margin-bottom: 4px; text-align: left; padding-left: 5px; }
+        .data-box { font-size: 1.4rem; color: #399cff; font-weight: bold; margin-bottom: 10px; background: #1f2327; padding: 8px; border-radius: 6px; }
+        .sensor-box { font-size: 1.4rem; font-weight: bold; padding: 10px; border-radius: 8px; transition: background 0.3s, color 0.3s; text-align: center; border: 1px solid transparent; }
+        
+        .normal-box { background: #1e3a24; color: #52be6f; border-color: #28a745; }
+        .laser-box { background: #3a1e2d; color: #f268a3; border-color: #e83e8c; }
+        .stable-gyro { background: #2b3035; color: #dee2e6; border-color: #495057; }
+        .accel-box { background: #1a2e4c; color: #5ca1f1; border-color: #0056b3; font-size: 1.2rem; }
+        .compas-box { background: #3d1a1a; color: #ff6b6b; border-color: #640000; font-size: 1.2rem; }
+        .infra_red-box { background: #33361a; color: #d4e157; border-color: #293500; font-size: 1.0rem; }
+        .barometer-box { background: #38371a; color: #ffee55; border-color: #464400; font-size: 1.2rem; }
+        .orientation_bno-box { background: #3a2617; color: #ffa726; border-color: #3a1f00; font-size: 1.2rem; }
+        .accelerometer_bno-box { background: #173636; color: #26c6da; border-color: #003e42; font-size: 1.2rem; }
+        .magnetometer_bno-box { background: #351a2e; color: #ba68c8; border-color: #350023; font-size: 1.2rem; }
+        .alert-gyro { background: #dc3545; color: white; border-color: #ff6b6b; animation: blinker 1s linear infinite; }
+        @keyframes blinker { 50% { opacity: 0.7; } }
+
+        .control-panel { background: #1f2327; padding: 10px; border-radius: 8px; margin-bottom: 15px; display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; border: 1px solid #343a40; }
+        .control-panel label { font-size: 0.75rem; font-weight: bold; color: #c2c7d0; cursor: pointer; display: flex; align-items: center; gap: 4px; background: #2c3034; padding: 4px 8px; border-radius: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+        .sensor-container { transition: all 0.3s ease; }
+    </style>
+</head>
+<body>
+    <div class="vh-100">
+        <div class="top-bar">
+            <button id="btn1" type="button" class="btn active-mode" onclick="changeMode(1)">Mode 1</button>
+            <button id="btn2" type="button" class="btn" onclick="changeMode(2)">Mode 2</button>
+            <button id="btn3" type="button" class="btn" onclick="changeMode(3)">Mode 3</button>
+        </div>
+        
+        <div id="mode2_text" style="text-shadow: 0px 4px 15px rgba(0, 0, 0, 0.75);">
+            <p style="margin: 20px;">Mode 2 Active</p>
+        </div>
+        
+
+        <div class="container" id="wasd_pad">
+            <div class="row" style="margin-bottom: 0.5rem;">
+                <div class="col-4"></div>        
+                <div class="col-4">
+                    <button id="W" type="button" class="btn btn-wasd" 
+                            ontouchstart="handleTouch('W', true)" 
+                            ontouchend="handleTouch('W', false)">W</button>
+                </div>
+                <div class="col-4"></div>
+            </div>
+            <div class="row">
+                <div class="col-4">
+                    <button id="A" type="button" class="btn btn-wasd" 
+                            ontouchstart="handleTouch('A', true)" 
+                            ontouchend="handleTouch('A', false)">A</button>
+                </div>
+                <div class="col-4">
+                    <button id="S" type="button" class="btn btn-wasd" 
+                            ontouchstart="handleTouch('S', true)" 
+                            ontouchend="handleTouch('S', false)">S</button>
+                </div>
+                <div class="col-4">
+                    <button id="D" type="button" class="btn btn-wasd" 
+                            ontouchstart="handleTouch('D', true)" 
+                            ontouchend="handleTouch('D', false)">D</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="telemetry_panel">
+            <h1>ESP32 Telemetry</h1>
+
+            <div class="control-panel">
+                <label><input type="checkbox" checked onclick="toggleSensor('container-hc', this)"> HC-SR04</label>
+                <label><input type="checkbox" checked onclick="toggleSensor('container-laser', this)"> VL53L0X</label>
+                <label><input type="checkbox" checked onclick="toggleSensor('container-gir', this)"> Orientation</label>
+                <label><input type="checkbox" checked onclick="toggleSensor('container-acc', this)"> Accelerometer</label>
+                <label><input type="checkbox" checked onclick="toggleSensor('container-com', this)"> Compas</label>
+                <label><input type="checkbox" checked onclick="toggleSensor('container-inf', this)"> Infra red</label>
+                <label><input type="checkbox" checked onclick="toggleSensor('container-bar', this)"> Barometer</label>
+                <label><input type="checkbox" checked onclick="toggleSensor('container-ori', this)"> Orientation bno</label>
+                <label><input type="checkbox" checked onclick="toggleSensor('container-acc_bno', this)"> Accelerometer bno</label>
+                <label><input type="checkbox" checked onclick="toggleSensor('container-mag', this)"> Magnetometer</label>
+            </div>
+            
+            <div class="sensor-container" id="container-hc">
+                <div class="data-title">HC-SR04 Distance</div>
+                <div class="sensor-box normal-box" id="distance-hc">%DISTANCE_HC% cm</div>
+            </div>
+
+            <div class="sensor-container" id="container-laser">
+                <div class="data-title">VL53L0X Laser Distance</div>
+                <div class="sensor-box laser-box" id="distance-laser">%DISTANCE_GY% cm</div>
+            </div>
+            
+            <div class="sensor-container" id="container-gir">
+                <div class="data-title">Orientation / Collision Status</div>
+                <div class="sensor-box stable-gyro" id="gyro-status">%GIROSCOPE%</div>
+            </div>
+
+            <div class="sensor-container" id="container-acc">
+                <div class="data-title">Accelerometer (Raw G's)</div>
+                <div class="sensor-box accel-box" id="accelerometer">%ACCELEROMETER%</div>
+            </div>
+
+            <div class="sensor-container" id="container-com">
+                <div class="data-title">Compas</div>
+                <div class="sensor-box compas-box" id="compas">%COMPAS%</div>
+            </div>
+            
+            <div class="sensor-container" id="container-inf">
+                <div class="data-title">Infra red sensors</div>
+                <div class="sensor-box infra_red-box" id="infra_red">%INFRA_RED%</div>
+            </div> 
+
+            <div class="sensor-container" id="container-bar">
+                <div class="data-title">Barometer</div>
+                <div class="sensor-box barometer-box" id="barometer">%BAROMETER%</div>
+            </div>
+
+            <div class="sensor-container" id="container-ori">
+                <div class="data-title">Orientation use bno</div>
+                <div class="sensor-box orientation_bno-box" id="orientation_bno">%ORIENTATION_BNO%</div>
+            </div>
+
+            <div class="sensor-container" id="container-acc_bno">
+                <div class="data-title">Accelerometer use bno</div>
+                <div class="sensor-box accelerometer_bno-box" id="accelerometer_bno">%ACCELEROMETER_BNO%</div>
+            </div>
+
+            <div class="sensor-container" id="container-mag">
+                <div class="data-title">Magnetometer use bno</div>
+                <div class="sensor-box magnetometer_bno-box" id="magnetometer_bno">%MAGNETOMETER_BNO%</div>
+            </div>
+            
+            <div class="data-title">System Date & Time</div>
+            <div class="data-box" id="time-value">%LIVE_DATE%</div>
+        </div>
+    </div>
+
+<script>
+    let marker_a = false, marker_w = false, marker_s = false, marker_d = false;
+
+    const button_a = document.getElementById("A"), button_w = document.getElementById("W"), button_s = document.getElementById("S"), button_d = document.getElementById("D");
+
+    const mode2_text = document.getElementById("mode2_text");
+    const wasd_pad = document.getElementById("wasd_pad");
+    const telemetry_panel = document.getElementById("telemetry_panel");
+    const btn1 = document.getElementById("btn1"), btn2 = document.getElementById("btn2"), btn3 = document.getElementById("btn3");
+
+    let currentMode = 1;
+    let telemetryInterval = null;
+
+    function sendHttpRequest(url) { 
+        fetch(url).catch(err => console.log("Помилка відправки запиту:", err)); 
+    }
+
+    function handleTouch(key, isPressed) {
+        if (typeof event !== 'undefined') event.preventDefault(); 
+        if (currentMode !== 1) return; 
+
+        let btn = document.getElementById(key);
+        
+        if (isPressed) {
+            if(btn) { btn.style.background = "#7f8183"; btn.style.opacity = "1"; }
+            if (key === 'W') marker_w = true;
+            if (key === 'S') marker_s = true;
+            if (key === 'A') marker_a = true;
+            if (key === 'D') marker_d = true;
+        } else {
+            if(btn) { btn.style.background = "transparent"; btn.style.opacity = "0.5"; }
+            if (key === 'W') marker_w = false;
+            if (key === 'S') marker_s = false;
+            if (key === 'A') marker_a = false;
+            if (key === 'D') marker_d = false;
+        }
+
+        sendSignal();
+    }
+
+    function changeMode(modeNum) {
+        currentMode = modeNum;
+        
+        btn1.classList.remove("active-mode");
+        btn2.classList.remove("active-mode");
+        btn3.classList.remove("active-mode");
+
+        if (telemetryInterval) {
+            clearInterval(telemetryInterval);
+            telemetryInterval = null;
+        }
+        document.body.style.background = "#212529";
+
+        if (currentMode === 1) {
+            btn1.classList.add("active-mode");
+            wasd_pad.style.display = "flex";
+            mode2_text.style.display = "none";
+            telemetry_panel.style.display = "none";
+            sendHttpRequest('/mode1');
+        } else if (currentMode === 2) {
+            btn2.classList.add("active-mode");
+            wasd_pad.style.display = "none";
+            mode2_text.style.display = "flex";
+            telemetry_panel.style.display = "none";
+            sendHttpRequest('/mode2');
+        } else if (currentMode === 3) {
+            btn3.classList.add("active-mode");
+            wasd_pad.style.display = "none";
+            mode2_text.style.display = "none";
+            telemetry_panel.style.display = "block";
+            sendHttpRequest('/mode3');
+            
+            let epochTime = Math.floor(Date.now() / 1000);
+            fetch('/sync-time?epoch=' + epochTime).catch(e => console.log(e));
+            
+            startTelemetry();
+        }
+    }
+
+    function sendSignal() {
+      if (currentMode !== 1) return;
+      if(marker_w && marker_a) sendHttpRequest('/cmd?dir=forward_left');
+      else if(marker_w && marker_d) sendHttpRequest('/cmd?dir=forward_right');
+      else if(marker_s && marker_a) sendHttpRequest('/cmd?dir=backward_left');
+      else if(marker_s && marker_d) sendHttpRequest('/cmd?dir=backward_right');
+      else if(marker_w) sendHttpRequest('/cmd?dir=forward');
+      else if(marker_s) sendHttpRequest('/cmd?dir=backward');
+      else if(marker_a) sendHttpRequest('/cmd?dir=left');
+      else if(marker_d) sendHttpRequest('/cmd?dir=right');
+      else sendHttpRequest('/cmd?dir=stop');
+    }
+
+    document.addEventListener("keydown", function(event) {
+        let changed = false;
+        if(currentMode === 1) {
+            if(event.code === "KeyW" && !marker_w){ marker_w = true; if(button_w){button_w.style.background = "#7f8183"; button_w.style.opacity = "1";} event.preventDefault(); changed = true; }
+            if(event.code === "KeyS" && !marker_s){ marker_s = true; if(button_s){button_s.style.background = "#7f8183"; button_s.style.opacity = "1";} event.preventDefault(); changed = true; }
+            if(event.code === "KeyA" && !marker_a){ marker_a = true; if(button_a){button_a.style.background = "#7f8183"; button_a.style.opacity = "1";} event.preventDefault(); changed = true; }
+            if(event.code === "KeyD" && !marker_d){ marker_d = true; if(button_d){button_d.style.background = "#7f8183"; button_d.style.opacity = "1";} event.preventDefault(); changed = true; }
+            if(changed) sendSignal();
+        }
+        if(event.code === "Digit1"){ event.preventDefault(); changeMode(1); }
+        else if(event.code === "Digit2"){ event.preventDefault(); changeMode(2); }
+        else if(event.code === "Digit3"){ event.preventDefault(); changeMode(3); }
+    });
+
+    document.addEventListener("keyup", function(event) {
+        let changed = false; 
+        if(event.code === "KeyW"){ marker_w = false; if(button_w){button_w.style.background = "transparent"; button_w.style.opacity = "0.5"} changed = true; }
+        if(event.code === "KeyS"){ marker_s = false; if(button_s){button_s.style.background = "transparent"; button_s.style.opacity = "0.5"} changed = true; }
+        if(event.code === "KeyA"){ marker_a = false; if(button_a){button_a.style.background = "transparent"; button_a.style.opacity = "0.5"} changed = true; }
+        if(event.code === "KeyD"){ marker_d = false; if(button_d){button_d.style.background = "transparent"; button_d.style.opacity = "0.5"} changed = true; }
+        if(changed) sendSignal();
+    });
+
+    function toggleSensor(containerId, checkbox) {
+        let container = document.getElementById(containerId);
+        if (container) {
+            container.style.display = checkbox.checked ? 'block' : 'none';
+        }
+    }
+
+    function startTelemetry() {
+        telemetryInterval = setInterval(function() {
+            if (currentMode !== 3) return;
+            
+            fetch('/api/data')
+            .then(response => response.json())
+            .then(data => {
+                let hcElem = document.getElementById('distance-hc');
+                if (hcElem) hcElem.innerText = data.distance_hc + (data.distance_hc == "Out of Range" ? "" : " cm");
+                
+                let laserElem = document.getElementById('distance-laser');
+                if (laserElem) laserElem.innerText = data.distance_laser + (data.distance_laser == "Out of Range" ? "" : " cm");
+
+                let accElem = document.getElementById('accelerometer');
+                if (accElem) accElem.innerText = data.accelerometer;
+
+                let comElem = document.getElementById('compas');
+                if (comElem) comElem.innerText = data.compas;
+
+                let infElem = document.getElementById('infra_red');
+                if (infElem) infElem.innerText = data.infra_red;
+
+                let barElem = document.getElementById('barometer');
+                if (barElem) barElem.innerText = data.barometer;
+
+                let oriElem = document.getElementById('orientation_bno');
+                if (oriElem) oriElem.innerText = data.orientation_bno;
+
+                let acc_bno_Elem = document.getElementById('accelerometer_bno');
+                if (acc_bno_Elem) acc_bno_Elem.innerText = data.accelerometer_bno;
+
+                let magElem = document.getElementById('magnetometer_bno');
+                if (magElem) magElem.innerText = data.magnetometer_bno;
+
+                let timeElem = document.getElementById('time-value');
+                if (timeElem) timeElem.innerText = data.datetime;
+                
+                let gyroElement = document.getElementById('gyro-status');
+                if (gyroElement) {
+                    gyroElement.innerText = data.position;
+                    if (data.position && data.position.includes("Collision")) {
+                        gyroElement.className = "sensor-box alert-gyro";
+                        document.body.style.background = "#4a1c24"; 
+                    } else {
+                        gyroElement.className = "sensor-box stable-gyro";
+                        document.body.style.background = "#212529";
+                    }
+                }
+            })
+            .catch(err => console.log("Помилка отримання телеметрії:", err));
+        }, 1000);
+    }
+</script>
+</body>
+</html>
+  )=====";
+  server.send(200, "text/html", html);
+}
+// ------------
+
+// ---- mode1 ---->
+// --- Check command --->
+void handleCommand() {
+  if (!mode1) {
+    server.send(200, "text/plain", "Manual mode disabled");
+    return;
+  }
+
+  String message = server.arg("dir");
+  Serial.print("Отримано команду: ");
+  Serial.println(message);
+
+  if(message == "forward_left")        Motors(50, 0, 80, 0);
+  else if(message == "forward_right")  Motors(80, 0, 50, 0);
+  else if(message == "backward_left")  Motors(0, 50, 0, 80);
+  else if(message == "backward_right") Motors(0, 80, 0, 50);
+  else if(message == "forward")        Motors(80, 0, 80, 0);
+  else if(message == "backward")       Motors(0, 80, 0, 80);
+  else if(message == "left")           Motors(0, 0, 80, 0);
+  else if(message == "right")          Motors(80, 0, 0, 0);
+  else                                 Motors(0, 0, 0, 0); // stop
+
+  server.send(200, "text/plain", "OK");
+}
+// ----------
+// ------------
+
+// ---- Mode3 ---->
+// --- Ultrasonic sensor --->
+float getSensorDistance() {
+  digitalWrite(TRIG_PIN, LOW);
+  delayMicroseconds(2); 
+  digitalWrite(TRIG_PIN, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(TRIG_PIN, LOW);
+  
+  long duration = pulseIn(ECHO_PIN, HIGH, 15000); 
+  if (duration <= 0 || duration > 25000) return -1.0; 
+  
+  float distanceCm = duration * 0.0343 / 2.0;
+  if (distanceCm < 2.0 || distanceCm > 400.0) return -1.0;
+  return distanceCm;
+}
+// ----------
+
+// --- Laser sensor --->
+float getSensorDistance_laser(){
+  VL53L0X_RangingMeasurementData_t measure;
+  lox.rangingTest(&measure, false);
+  
+  if (measure.RangeStatus == 0) {
+    float result = (float)measure.RangeMilliMeter / 10.0;
+    if(result <= 0.5 || result > 150.0) return -1.0; 
+    return result;
+  } else {
+    return -1.0;
+  }
+}
+// ----------
+
+// --- Suport with date calibration few else function --->
+bool readAbsoluteIMU(float &x, float &y, float &z) {
+  Wire.beginTransmission(IMU_ADDRESS);
+  Wire.write(0x3B); 
+  if (Wire.endTransmission(false) != 0) return false;
+
+  if (Wire.requestFrom(IMU_ADDRESS, 6) != 6) return false;
+
+  int16_t raw_x = (Wire.read() << 8) | Wire.read();
+  int16_t raw_y = (Wire.read() << 8) | Wire.read();
+  int16_t raw_z = (Wire.read() << 8) | Wire.read();
+
+  x = (float)raw_x / 16384.0;
+  y = (float)raw_y / 16384.0;
+  z = (float)raw_z / 16384.0;
+  
+  return true;
+}
+// ----------
+
+// --- Giroscope --->
+String getIMUOrientation(){
+  float rawX = 0, rawY = 0, rawZ = 0;
+  float threshold = 0.25; 
+  String position = "Stable / Flat";
+
+  if (readAbsoluteIMU(rawX, rawY, rawZ)) {
+    float calX = rawX - offsetX;
+    float calY = rawY - offsetY;
+    
+    smoothX = (smoothX * 0.7) + (calX * 0.3);
+    smoothY = (smoothY * 0.7) + (calY * 0.3);
+    
+    if (abs(smoothX) > abs(smoothY)) {
+      if (smoothX > threshold)       position = "Collision Left";
+      else if (smoothX < -threshold) position = "Collision Right";
+    } else {
+      if (smoothY > threshold)       position = "Collision Front";
+      else if (smoothY < -threshold) position = "Collision Back";
+    }
+  } else {
+    position = "IMU Sensor Offline";
+  }
+  return position;
+}
+// ----------
+
+// --- Real time function --->
+String getLiveDateString() {
+  struct tm timeinfo;
+  if(!getLocalTime(&timeinfo)) return "Time Not Set Yet (Syncing...)";
+  char dateBuffer[30]; 
+  strftime(dateBuffer, sizeof(dateBuffer), "%Y-%m-%d %H:%M:%S", &timeinfo);
+  return String(dateBuffer);
+}
+// ----------
+
+// --- Accelerometer --->
+String getMPU9250_Accel_String() {
+  float ax = 0, ay = 0, az = 0;
+  if (readAbsoluteIMU(ax, ay, az)) {
+    return "X: " + String(ax, 2) + " g | Y: " + String(ay, 2) + " g | Z: " + String(az, 2) + " g";
+  }
+  return "Accel Error";
+}
+// ----------
+
+// --- Infra red sensors --->
+String getInfraredSensor(){
+  short s1 = analogRead(sensors[0]);
+  short s2 = analogRead(sensors[1]);
+  short s3 = analogRead(sensors[2]);
+  short s4 = analogRead(sensors[3]);
+  short s5 = analogRead(sensors[4]);
+  short s6 = analogRead(sensors[5]);
+  short s7 = analogRead(sensors[6]);
+  short s8 = analogRead(sensors[7]);
+
+  return "S1: " + String(s1) + "  |  S2: " + String(s2) + "  |  S3: " + String(s3) + "  |  S4: " + String(s4) + "  |  S5: " + String(s5) + "  |  S6: " + String(s6) + "  |  S7: " + String(s7) + "  |  S8: " + String(s8);
+}
+// ----------
+
+// --- Compas --->
+String getCompassHeading() {
+  static int16_t mx_min = 32767, mx_max = -32768;
+  static int16_t my_min = 32767, my_max = -32768;
+
+  Wire.beginTransmission(0x0C);
+  Wire.write(0x02); 
+  if (Wire.endTransmission() != 0) return "Compass Offline";
+  
+  Wire.requestFrom(0x0C, 1);
+  if (Wire.read() & 0x01) { 
+    Wire.beginTransmission(0x0C);
+    Wire.write(0x03); 
+    Wire.endTransmission(false);
+    
+    if (Wire.requestFrom(0x0C, 7) == 7) {
+      uint8_t x_low  = Wire.read();
+      uint8_t x_high = Wire.read();
+      uint8_t y_low  = Wire.read();
+      uint8_t y_high = Wire.read();
+      uint8_t z_low  = Wire.read();
+      uint8_t z_high = Wire.read();
+      uint8_t st2    = Wire.read(); 
+      
+      if (!(st2 & 0x08)) { 
+        int16_t raw_mx = (int16_t)(x_low | (x_high << 8));
+        int16_t raw_my = (int16_t)(y_low | (y_high << 8));
+        
+        if (raw_mx < mx_min) mx_min = raw_mx;
+        if (raw_mx > mx_max) mx_max = raw_mx;
+        if (raw_my < my_min) my_min = raw_my;
+        if (raw_my > my_max) my_max = raw_my;
+        
+        float offset_x = (mx_max + mx_min) / 2.0;
+        float offset_y = (my_max + my_min) / 2.0;
+        
+        float cal_mx = (float)raw_mx - offset_x;
+        float cal_my = (float)raw_my - offset_y;
+        
+        float heading = atan2(cal_my, cal_mx);
+        float headingDegrees = heading * 180.0 / PI;
+        
+        if (headingDegrees < 0) headingDegrees += 360.0;
+        
+        if (mx_max - mx_min < 30 || my_max - my_min < 30) {
+          return "Calibrating...";
+        }
+
+        if (headingDegrees >= 337.5 || headingDegrees < 22.5)   return "North [" + String(headingDegrees, 0) + "°]";
+        if (headingDegrees >= 22.5 && headingDegrees < 67.5)     return "North-East [" + String(headingDegrees, 0) + "°]";
+        if (headingDegrees >= 67.5 && headingDegrees < 112.5)    return "East [" + String(headingDegrees, 0) + "°]";
+        if (headingDegrees >= 112.5 && headingDegrees < 157.5)   return "South-East [" + String(headingDegrees, 0) + "°]";
+        if (headingDegrees >= 157.5 && headingDegrees < 202.5)   return "South [" + String(headingDegrees, 0) + "°]";
+        if (headingDegrees >= 202.5 && headingDegrees < 247.5)   return "South-West [" + String(headingDegrees, 0) + "°]";
+        if (headingDegrees >= 247.5 && headingDegrees < 292.5)   return "West [" + String(headingDegrees, 0) + "°]";
+        if (headingDegrees >= 292.5 && headingDegrees < 337.5)   return "North-West [" + String(headingDegrees, 0) + "°]";
+      }
+    }
+  }
+  return "Calculating...";
+}
+// ----------
+
+// --- Barometer --->
+String getBarometerData() {
+  float temp = bmp.readTemperature();
+  if (isnan(temp) || temp < -40.0) {
+    return "Barometer Offline";
+  }
+  float pressurePa = bmp.readPressure(); 
+  float pressureMmHg = pressurePa / 133.3224; 
+
+  return "T: " + String(temp, 1) + "°C | P: " + String(pressureMmHg, 1) + " mmHg";
+}
+// ----------
+
+// --- Orientation use BNO --->
+String getBNO_Orientation() {
+  sensors_event_t orientationData;
+  bno.getEvent(&orientationData, Adafruit_BNO055::VECTOR_EULER);
+  
+  float heading = orientationData.orientation.x; 
+  float pitch   = orientationData.orientation.y; 
+  float roll    = orientationData.orientation.z; 
+
+  return "Heading: " + String(heading, 1) + "° | Pitch: " + String(pitch, 1) + "°";
+}
+// ----------
+
+// --- Accelerometer use BNO --->
+String getBNO_Accelerometer() {
+  sensors_event_t accelData;
+  bno.getEvent(&accelData, Adafruit_BNO055::VECTOR_ACCELEROMETER);
+
+  float ax = accelData.acceleration.x;
+  float ay = accelData.acceleration.y;
+  float az = accelData.acceleration.z;
+
+  return "Acc X: " + String(ax, 2) + " | Y: " + String(ay, 2) + " | Z: " + String(az, 2);
+}
+// ----------
+
+// --- Magnetometer use BNO --->
+String getBNO_Magnetometer() {
+  sensors_event_t magData;
+  bno.getEvent(&magData, Adafruit_BNO055::VECTOR_MAGNETOMETER);
+
+  float mx = magData.magnetic.x;
+  return "Mag X: " + String(mx, 1) + " uT";
+}
+// ----------
+// ------------
+
+
+// ---- Mode root 1 ---->
+void handleMode1() {
+  mode1 = true; mode2 = false;
+  Motors(0, 0, 0, 0); // Зупиняємо двигуни
+
+  //u8x8.clear();
+  Serial.println("Обраний <mode1>. Усі ШІМ-піни занулені!");
+  //u8x8.drawString(1, 4, "Ready to work!");
+  server.send(200, "text/plain", "Mode 1 Active");
+}
+// ------------
+
+// ---- Mode root 2 ---->
+void handleMode2() {
+  for(int i = 0; i < 8; i++) {
+    sensor_max[i] = 0;
+    sensor_min[i] = 10000;
+  }
+  integral = 0;
+  lastError = 0;
+  calibrate_marker = true; 
+
+  mode2 = true; mode1 = false; 
+  Serial.println("Обраний <mode2>");
+  server.send(200, "text/plain", "Mode 2 Active");
+}
+// ------------
+
+// ---- Mode root 3 ---->
+void handleMode3() {
+  // В режимі телеметрії вимикаємо інші режими та глушимо мотори
+  mode1 = false; mode2 = false;
+  Motors(0, 0, 0, 0);
+
+  Serial.println("Режим 3 активовано: Телеметрія");
+  server.send(200, "text/plain", "Mode 3 Activated");
+}
+// ------------
+
+// ---- Mode3 ---->
+// --- Set key and replace it on date --->
+void handleGetLiveValues() {
+  float distance = getSensorDistance();
+  float distance_laser = getSensorDistance_laser();
+
+  String distanceStr = (distance < 0) ? "Out of Range" : String(distance, 1);
+  String distanceStr_laser = (distance_laser < 0) ? "Out of Range" : String(distance_laser, 1);
+  String position = getIMUOrientation();
+  String accelStr = getMPU9250_Accel_String();
+  String compas = getCompassHeading();
+  String barometer = getBarometerData();
+  String infra_red = getInfraredSensor();
+  String orientation_bno = getBNO_Orientation();
+  String accelerometer_bno = getBNO_Accelerometer();
+  String magnetometer_bno = getBNO_Magnetometer();
+
+  String json = "{";
+  json += "\"distance_hc\":\"" + distanceStr + "\",";
+  json += "\"distance_laser\":\"" + distanceStr_laser + "\",";
+  json += "\"position\":\"" + position + "\",";
+  json += "\"accelerometer\":\"" + accelStr + "\","; 
+  json += "\"compas\":\"" + compas + "\","; 
+  json += "\"infra_red\":\"" + infra_red + "\","; 
+  json += "\"barometer\":\"" + barometer + "\",";
+  json += "\"orientation_bno\":\"" + orientation_bno + "\",";
+  json += "\"accelerometer_bno\":\"" + accelerometer_bno + "\",";
+  json += "\"magnetometer_bno\":\"" + magnetometer_bno + "\",";
+  json += "\"datetime\":\"" + getLiveDateString() + "\"";
+  json += "}";
+  
+  server.send(200, "application/json", json);
+}
+// ----------
+
+// --- Sencronize platform time with server --->
+void handleSyncTime() {
+  if (server.hasArg("epoch")) {
+    long long epoch = server.arg("epoch").toInt();
+    struct timeval tv;
+    tv.tv_sec = epoch;
+    tv.tv_usec = 0;
+    settimeofday(&tv, NULL);
+    server.send(200, "text/plain", "OK");
+  } else {
+    server.send(400, "text/plain", "Bad Request");
+  }
+}
+// ----------
+
+// --- Create local hot spot and set web server --->
+void connection(){
+  WiFi.mode(WIFI_AP);
+
+  uint8_t protocol_bitmap = WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G | WIFI_PROTOCOL_11N;
+  esp_wifi_set_protocol(WIFI_IF_AP, protocol_bitmap);
+  esp_wifi_set_bandwidth(WIFI_IF_AP, WIFI_BW_HT20); 
+  
+  #if defined(ESP_IDF_VERSION_MAJOR) && ESP_IDF_VERSION_MAJOR >= 4
+    esp_wifi_set_ps(WIFI_PS_NONE); 
+  #endif
+
+  WiFi.softAP("esp32", "", 6, 0, 8);
+  Serial.println("AP live.");
+  
+  
+  server.on("/", handleRoot);
+  server.on("/cmd", handleCommand);
+  server.on("/mode1", handleMode1);
+  server.on("/mode2", handleMode2);
+  
+  
+  server.on("/mode3", handleMode3);
+  server.on("/api/data", handleGetLiveValues); 
+  server.on("/sync-time", handleSyncTime);     
+  
+  server.begin();
+  Serial.println("Web Server started on IP: 192.168.4.1");
+  u8x8.drawString(0, 3, "Web Server Live");
+  u8x8.drawString(0, 5, "IP: 192.168.4.1");
+}
+// ------------
+// --------------
+
+
+// ---- mode2 ----
+// --- Calibrate ---
+void calibrate() {
+  long startTime = millis();
+  Motors(80, -80); 
+  //u8x8.clear();
+  //u8x8.drawString(3, 3, "Calibration...");
+
+  int8_t current_step = 1;
+
+  while(millis() - startTime < 3000) {
+    server.handleClient(); 
+    if (!mode2) { 
+      break; 
+    }
+
+    long current_time = millis() - startTime;
+    if(current_time < 1000 && current_step == 1){ /*u8x8.drawString(8, 5, "3");*/ current_step = 2; }
+    else if(current_time >= 1000 && current_step == 2){ /*u8x8.drawString(8, 5, "2");*/ current_step = 3; }
+    else if(current_time >= 2000 && current_step == 3){ /*u8x8.drawString(8, 5, "1");*/ current_step = 4; }
+    
+    for(int8_t i = 0; i < 8; ++i) {
+      short current_val = analogRead(sensors[i]);
+      if(current_val < sensor_min[i]) { sensor_min[i] = current_val; }
+      if(current_val > sensor_max[i]) { sensor_max[i] = current_val; }
+    }
+  } 
+
+  Motors(0, 0); 
+  delay(100);
+  /*
+  u8x8.clear();
+  u8x8.drawString(3, 3, "Completed!");
+  delay(500);
+  u8x8.clear();
+  */
+}
+// ----------
+
+// --- Sensor read ---
+int sensorsRead(){
+    short sensors_read[8]; 
+    long sum = 0, count = 0, raw = 0, calibrated = 0, position = 0;
+
+    // -- read and calibrate sensors --
+    for(int i = 0; i < 8; ++i){
+      raw = analogRead(sensors[i]);
+      
+      if(sensor_max[i] == sensor_min[i]) sensor_max[i] += 1; 
+      
+      calibrated = map(raw, sensor_min[i], sensor_max[i], 0, 1000); 
+      calibrated = constrain(calibrated, 0, 1000); 
+
+      
+      if(i == 7) calibrated -= 100;
+      if(i == 5) calibrated += 70;
+      if (calibrated < 200) calibrated = 0;
+
+      
+      sensors_read[i] = calibrated;
+
+      sum += (long)calibrated * weights[i];
+      count += calibrated;
+    }
+
+    /*
+    // -- print passive/active sensors
+    int8_t disp_col = 2; 
+    for(int8_t i = 7; i >= 0; --i){
+      disp_col += 1; 
+
+      if(sensors_read[i] >= 850){
+        u8x8.drawString(disp_col, 4, "+"); 
+      } else {
+        u8x8.drawString(disp_col, 4, "-"); 
+      }
+    } 
+    */
+    
+    // 3. Розрахунок помилки для PID
+    if (count == 0) return lastError;
+    position = sum / count;  
+    return position;
+}
+// ----------
+
+// --- Apply motors ---
+void Motors(short leftSpeed, short rightSpeed){
+  leftSpeed = constrain(leftSpeed, -255, 255);
+  rightSpeed = constrain(rightSpeed, -255, 255);
+
+  if(leftSpeed >= 0){ analogWrite(motors[0], leftSpeed); analogWrite(motors[1], 0); }
+  else { analogWrite(motors[0], 0); analogWrite(motors[1], abs(leftSpeed)); }
+
+  if(rightSpeed >= 0){ analogWrite(motors[2], rightSpeed); analogWrite(motors[3], 0); }
+  else { analogWrite(motors[2], 0); analogWrite(motors[3], abs(rightSpeed)); }
+}
+// ----------
+// ------------
+
+
+// ----- setup ----->
+void setup() {
+  Serial.begin(115200);
+
+  pinMode(motors[0], OUTPUT);
+  pinMode(motors[1], OUTPUT);
+  pinMode(motors[2], OUTPUT);
+  pinMode(motors[3], OUTPUT);
+
+  delay(1000); 
+  Serial.println("\n--- Старт програми ---");
+
+    delay(1000); 
+  
+  // --- Set ultrasonic sensor --->
+  pinMode(TRIG_PIN, OUTPUT);
+  digitalWrite(TRIG_PIN, LOW);
+  pinMode(ECHO_PIN, INPUT);
+  // ----------
+
+  // --- Set SDA and SCL, SetClock - 100000 --->
+  Wire.begin(8, 9); 
+  Wire.setClock(100000); 
+  delay(200);
+  // ----------
+
+  // --- Set display configuration --->
+  u8x8.begin();
+  u8x8.setFlipMode(1);
+  u8x8.setPowerSave(0); 
+  u8x8.setFont(u8x8_font_chroma48medium8_r);
+  u8x8.clear();
+  u8x8.drawString(1, 3, "Initializing...");
+  // ----------
+
+  // --- Initialization MPU9250 --->
+  Wire.beginTransmission(IMU_ADDRESS);
+  Wire.write(0x6B); 
+  Wire.write(0x00); 
+  if (Wire.endTransmission() != 0) {
+      log_e("Помилка ініціалізації MPU9250!");
+  }
+  delay(100); 
+  // ----------
+
+  // --- Calibrate date --->
+  float sumX = 0, sumY = 0, rawX, rawY, rawZ;
+  int validSamples = 0;
+  
+  for (int i = 0; i < 30; i++) {
+    if (readAbsoluteIMU(rawX, rawY, rawZ)) {
+      sumX += rawX;
+      sumY += rawY;
+      validSamples++;
+    }
+    delay(15);
+  }
+  if (validSamples > 0) {
+    offsetX = sumX / (float)validSamples;
+    offsetY = sumY / (float)validSamples;
+  }
+  delay(100); 
+  // ----------
+  
+  // --- Set orientation use BNO --->
+  Wire.beginTransmission(IMU_ADDRESS);
+  Wire.write(0x6B); 
+  Wire.write(0x00); 
+  Wire.endTransmission();
+  delay(10);
+  // ----------
+
+  // --- Set accelerometer use BNO --->
+  Wire.beginTransmission(IMU_ADDRESS);
+  Wire.write(0x37); 
+  Wire.write(0x02); 
+  Wire.endTransmission();
+  delay(10);
+  // ----------
+
+  // --- Set magnetometer use BNO --->
+  Wire.beginTransmission(0x0C); 
+  Wire.write(0x0A); 
+  Wire.write(0x16); 
+  Wire.endTransmission();
+  delay(10);
+  // ----------
+
+  // --- Set barometer --->
+  if (!bmp.begin(0x76)) { 
+    log_e("Не вдалося знайти барометр BMP280!");
+  } else {
+   
+    bmp.setSampling(Adafruit_BMP280::MODE_NORMAL,     /* Режим роботи */
+                    Adafruit_BMP280::SAMPLING_X2,     /* Температура */
+                    Adafruit_BMP280::SAMPLING_X16,    /* Тиск */
+                    Adafruit_BMP280::FILTER_X16,      /* Фільтрація шумів */
+                    Adafruit_BMP280::STANDBY_MS_500); /* Час очікування */
+  }
+  // ----------
+
+  // --- Try connection to BNO055 --->
+  if(!bno.begin()) {
+    Serial.print("BNO055 не знайдено! Перевірте підключення або адресу.");
+  }
+
+  delay(500);
+  bno.setExtCrystalUse(true);
+  // ---------- 
+  
+  // --- Initialize i2c protocol --->
+  lox.begin(0x29, false, &Wire); 
+  // ----------  
+  
+  // --- Try create acces point --->
+  connection();
+  // ----------
+
+  // --- Print massage that all good and platform rady to work --->
+  u8x8.clear();
+  u8x8.drawString(1,2, "Ready to work!");
+  u8x8.drawString(1,4, "IP: 192.168.4.1");
+  // ----------
+}
+// ----------------
+
+// ----- loop ----->
+void loop() {
+  server.handleClient(); 
+
+  // --- Check mode 2 status --->
+  if (mode2) {
+    if (calibrate_marker) {
+      calibrate();
+      calibrate_marker = false;
+    }
+
+    if (!mode2) return; 
+
+    short position = sensorsRead(); 
+    float error = position; 
+
+    float P = error;
+    integral += error;
+    integral = constrain(integral, -2000, 2000); 
+    
+    float D = error - lastError;
+    lastError = error;
+
+    float steering = (Kp * P) + (Ki * integral) + (Kd * D);
+
+    short lSpeed = baseSpeed + steering;
+    short rSpeed = baseSpeed - steering;
+
+    Motors(lSpeed, rSpeed);  
+
+    if (millis() - lastDisplayTime > 300) {
+      lastDisplayTime = millis();
+    }
+  }
+  // ----------
+}
+// ----------------
