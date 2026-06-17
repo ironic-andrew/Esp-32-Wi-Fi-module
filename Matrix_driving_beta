@@ -1,24 +1,196 @@
 #include <WiFi.h>
 #include <WebServer.h>
-
 #include <Arduino.h>
+#include <esp_wifi.h>
 
+int robotX[9];
+int robotY[9];
+int routeSize = 0;
+bool mode = false;
+
+
+const int8_t motors[4] = {38, 37, 40, 39};
 
 WebServer server(80);
 
+void send_route();
+
 void handleRoot() {
   String html = R"=====(
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <title>Робот-Матриця 3х3</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f4f4f9;
+            margin-top: 50px;
+        }
+        h2 { color: #333; }
+        .matrix {
+            display: grid;
+            grid-template-columns: repeat(3, 60px);
+            grid-gap: 10px;
+            margin-bottom: 20px;
+        }
+        .cell-label {
+            width: 60px;
+            height: 60px;
+            background-color: #fff;
+            border: 2px solid #ccc;
+            border-radius: 8px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            font-weight: bold;
+            user-select: none;
+            transition: all 0.2s;
+        }
+        .cell-label input {
+            display: none;
+        }
+        .cell-label:has(input:checked) { 
+            background-color: #4CAF50;
+            color: white;
+            border-color: #45a049;
+        }
+        .info {
+            color: #666;
+            font-size: 14px;
+        }
+        .btn { background: #6c757d; color: #f8f9fa; border: 1px solid #6c757d; padding: 0.5rem 1.5rem; font-size: 1rem; border-radius: 0.375rem; cursor: pointer; transition: 0.15s; outline: none; }
+        .btn:active { background: #4CAF50; border-color: #45a049; }
+    </style>
+</head>
+<body>
 
+    <h2>Інтерактивна матриця маршруту 3х3</h2>
+    <p class="info">Натискайте на клітинки та натисніть Start</p>
 
+    <div class="matrix">
+        <label class="cell-label"><input type="checkbox" data-x="0" data-y="0">0,0</label>
+        <label class="cell-label"><input type="checkbox" data-x="1" data-y="0">1,0</label>
+        <label class="cell-label"><input type="checkbox" data-x="2" data-y="0">2,0</label>
+        
+        <label class="cell-label"><input type="checkbox" data-x="0" data-y="1">0,1</label>
+        <label class="cell-label"><input type="checkbox" data-x="1" data-y="1">1,1</label>
+        <label class="cell-label"><input type="checkbox" data-x="2" data-y="1">2,1</label>
+        
+        <label class="cell-label"><input type="checkbox" data-x="0" data-y="2">0,2</label>
+        <label class="cell-label"><input type="checkbox" data-x="1" data-y="2">1,2</label>
+        <label class="cell-label"><input type="checkbox" data-x="2" data-y="2">2,2</label>
+    </div>
+       
+    <button id="btn" type="button" class="btn">Start</button>
 
+    <script>
+        let grid = [
+            [0, 0, 0],
+            [0, 0, 0],
+            [0, 0, 0]
+        ];
 
+        let routeX = []; 
+        let routeY = [];
+        
+        const checkboxes = document.querySelectorAll('.matrix input');
+        const btn = document.getElementById('btn');
+
+        
+        btn.addEventListener('mousedown', () => {
+            sendRouteToESP();
+        });
+        btn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            sendRouteToESP();
+        });
+        
+        checkboxes.forEach(checkbox => {
+            checkbox.addEventListener('change', (event) => {
+                const x = parseInt(event.target.getAttribute('data-x'));
+                const y = parseInt(event.target.getAttribute('data-y'));
+                grid[y][x] = event.target.checked ? 1 : 0;
+                processRoute();
+            });
+        });
+
+        function generateRoute(grid, startX, startY) {
+            let route = [];
+            let visited = new Set();
+            let queue = [[startX, startY]];
+
+            while (queue.length > 0) {
+                let [x, y] = queue.shift();
+                let key = `${x},${y}`;
+
+                if (visited.has(key) || !grid[y][x]) continue;
+
+                visited.add(key);
+                route.push({x, y});
+
+                const directions = [[1,0], [0,1], [-1,0], [0,-1]];
+                for (let [dx, dy] of directions) {
+                    let nextX = x + dx;
+                    let nextY = y + dy;
+                    if (nextX >= 0 && nextX < grid[0].length && nextY >= 0 && nextY < grid.length){
+                        if (grid[nextY][nextX] && !visited.has(`${nextX},${nextY}`)) {
+                            queue.push([nextX, nextY]);
+                        }
+                    }
+                }
+            }
+            return route;
+        }
+
+        function processRoute() {
+            let startPoint = null;
+            for (let y = 0; y < 3; y++) {
+                for (let x = 0; x < 3; x++) {
+                    if (grid[y][x] === 1) {
+                        startPoint = {x, y};
+                        break;
+                    }
+                }
+                if (startPoint) break;
+            }
+
+            if (!startPoint) {
+                routeX = [];
+                routeY = [];
+                return;
+            }
+
+            const finalRoute = generateRoute(grid, startPoint.x, startPoint.y);
+            routeX = finalRoute.map(point => point.x);
+            routeY = finalRoute.map(point => point.y);
+        }
+
+        function sendRouteToESP() {
+            if (routeX.length === 0) {
+                alert("Маршрут порожній!");
+                return;
+            }
+            const xStr = routeX.join(",");
+            const yStr = routeY.join(",");
+            const xhr = new XMLHttpRequest();
+            xhr.open("GET", `/send_route?x=${xStr}&y=${yStr}`, true);
+            xhr.send();
+        }
+    </script>
+</body>
+</html>
   )=====";
-server.send(200, "text/html", html);
+  server.send(200, "text/html", html);
 }
 
 void connection(){
   WiFi.mode(WIFI_AP);
-
   uint8_t protocol_bitmap = WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G | WIFI_PROTOCOL_11N;
   esp_wifi_set_protocol(WIFI_IF_AP, protocol_bitmap);
   esp_wifi_set_bandwidth(WIFI_IF_AP, WIFI_BW_HT20); 
@@ -31,23 +203,133 @@ void connection(){
   Serial.println("AP live.");
   
   server.on("/", handleRoot);
-  server.on("/cmd", handleCommand);
-  server.on("/mode1", handleMode1);
-  server.on("/mode2", handleMode2);
+  server.on("/send_route", send_route);
   
   server.begin();
   Serial.println("Web Server started on IP: 192.168.4.1");
-  u8x8.drawString(0, 3, "Web Server Live");
-  u8x8.drawString(0, 5, "IP: 192.168.4.1");
+}
+
+void send_route() {
+  if (server.hasArg("x") && server.hasArg("y")) {
+    String xRaw = server.arg("x"); 
+    String yRaw = server.arg("y");
+    
+    routeSize = 0; 
+    int lastIndex = 0;
+    while (lastIndex >= 0 && routeSize < 9) {
+      int commaIndex = xRaw.indexOf(',', lastIndex);
+      String token = (commaIndex == -1) ? xRaw.substring(lastIndex) : xRaw.substring(lastIndex, commaIndex);
+      lastIndex = (commaIndex == -1) ? -1 : commaIndex + 1;
+      robotX[routeSize] = token.toInt();
+      routeSize++;
+    }
+
+    lastIndex = 0;
+    int yCount = 0;
+    while (lastIndex >= 0 && yCount < 9) {
+      int commaIndex = yRaw.indexOf(',', lastIndex);
+      String token = (commaIndex == -1) ? yRaw.substring(lastIndex) : yRaw.substring(lastIndex, commaIndex);
+      lastIndex = (commaIndex == -1) ? -1 : commaIndex + 1;
+      robotY[yCount] = token.toInt();
+      yCount++;
+    }
+
+    Serial.printf("Маршрут прийнято. Точок: %d\n", routeSize);
+    mode = true; 
+    server.send(200, "text/plain", "OK");
+  } else {
+    server.send(400, "text/plain", "Missing arguments");
+  }
+}
+
+void Motors(int moto1_forward, int moto1_backward, int moto2_forward, int moto2_backward){
+  analogWrite(motors[0], moto1_forward);
+  analogWrite(motors[1], moto1_backward);
+  analogWrite(motors[2], moto2_forward);
+  analogWrite(motors[3], moto2_backward);
 }
 
 
-void setup() {
-  
-  connection();
+void road_drive(){
+  if (routeSize < 2) {
+    Serial.println("Замало точок для руху.");
+    return;
+  }
 
+  bool marker_left = false;
+  bool marker_right = false;  
+  
+  for(int i = 0; i < routeSize - 1; i++) {
+    int deltaX = robotX[i + 1] - robotX[i]; 
+    int deltaY = robotY[i + 1] - robotY[i]; 
+
+    Serial.printf("Крок %d: Рух з (%d,%d) до (%d,%d) -> deltaX: %d, deltaY: %d\n", 
+                  i, robotX[i], robotY[i], robotX[i+1], robotY[i+1], deltaX, deltaY);
+
+    if (deltaY < 0) {
+      
+      Serial.println("-> Рух ВПЕРЕД");
+      Motors(60, 0, 60, 0);
+      marker_right = false;
+    } 
+    else if (deltaY > 0) {
+      
+      Serial.println("-> Рух НАЗАД");
+      Motors(0, 60, 0, 60);
+      marker_left = false;
+    } 
+    else if (deltaX > 0) {
+      if(marker_right){
+
+        Motors(60, 0, 60, 0);
+        Serial.println("-> Поворот НАПРАВО/ПРЯМО");
+
+      }else{
+
+        marker_right = true;
+        Serial.println("-> Поворот НАПРАВО");
+        Motors(60, 0, 0, 0); 
+
+      }
+    } 
+    else if (deltaX < 0) {
+      if(marker_left){
+
+        Motors(0, 60, 0, 60);
+        Serial.println("-> Поворот НАЛІВО/");
+
+      }else{
+
+        marker_left = true;
+        Serial.println("-> Поворот НАЛІВО");
+        Motors(0, 0, 60, 0);
+
+      }
+      
+    }
+
+    delay(600); 
+  }
+
+  
+  Serial.println("Маршрут завершено. Зупинка.");
+  Motors(0, 0, 0, 0);
+}
+
+void setup() {
+  Serial.begin(115200);
+  
+  for(int i = 0; i < 4; i++) {
+    pinMode(motors[i], OUTPUT);
+  }
+  connection();
 }
 
 void loop() {
   server.handleClient(); 
+
+  if(mode){
+    mode = false;
+    road_drive();
+  }
 }
