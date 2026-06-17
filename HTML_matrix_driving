@@ -82,23 +82,27 @@
             [0, 0, 0]
         ];
 
-        const routeX = []; 
-        const routeY = [];
+        let routeX = []; 
+        let routeY = [];
         
         const checkboxes = document.querySelectorAll('.matrix input');
 
         const btn = document.getElementById('btn');
         let btn_status = false;
 
-        setInterval(() => {
-            if (btn.matches(':active')) {
-                btn_status = true;
-                console.log('Кнопка затиснута прямо зараз (ПК або телефон)!');
-            } else {
-                btn_status = false;
-                console.log('Кнопка відпущена');
-            }
-        }, 100);
+        function handleBtnStart() {
+            console.log('Кнопку Start натиснуто (ПК або телефон)! Відправляємо маршрут...');
+            sendRouteToESP();
+        }
+
+            
+        btn.addEventListener('mousedown', handleBtnStart);
+
+            
+        btn.addEventListener('touchstart', (event) => {
+            event.preventDefault(); 
+            handleBtnStart();
+        });
         
         checkboxes.forEach(checkbox => {
             checkbox.addEventListener('change', (event) => {
@@ -192,6 +196,25 @@
 
         
     }
+
+    function sendRouteToESP() {
+    const xStr = routeX.join(",");
+    const yStr = routeY.join(",");
+
+    const xhr = new XMLHttpRequest();
+    
+    // Формуємо запит на /send_route?x=0,1,2&y=0,0,0
+    xhr.open("GET", `/send_route?x=${xStr}&y=${yStr}`, true);
+    
+    xhr.onreadystatechange = function () {
+        if (xhr.readyState === 4 && xhr.status === 200) {
+            console.log("Відповідь від ESP32:", xhr.responseText);
+        }
+    };
+    
+    xhr.send();
+}
+
 
 
 
