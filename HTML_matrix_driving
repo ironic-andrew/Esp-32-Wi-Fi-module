@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <title>Робот-Матриця 3х3</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f4f4f9;
+            margin-top: 50px;
+        }
+        h2 { color: #333; }
+        /* Стиль для сітки 3х3 */
+        .matrix {
+            display: grid;
+            grid-template-columns: repeat(3, 60px);
+            grid-gap: 10px;
+            margin-bottom: 20px;
+        }
+        /* Стилізація чекбоксів під великі кнопки */
+        .cell-label {
+            width: 60px;
+            height: 60px;
+            background-color: #fff;
+            border: 2px solid #ccc;
+            border-radius: 8px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            font-weight: bold;
+            user-select: none;
+            transition: all 0.2s;
+        }
+        /* Ховаємо стандартний маленький чекбокс */
+        .cell-label input {
+            display: none;
+        }
+        /* Стиль для активованого чекбоксу (виправлено синтаксис) */
+        .cell-label:has(input:checked) { 
+            background-color: #4CAF50;
+            color: white;
+            border-color: #45a049;
+        }
+        .info {
+            color: #666;
+            font-size: 14px;
+        }
+        .btn { background: transparent; color: #f8f9fa; border: 1px solid #6c757d; padding: 0.375rem 0.75rem; font-size: 1rem; border-radius: 0.375rem; cursor: pointer; transition: 0.15s; outline: none; opacity: 0.5; }
+    </style>
+</head>
+<body>
+
+    <h2>Інтерактивна матриця маршруту 3х3</h2>
+    <p class="info">Натискайте на клітинки та відкрийте консоль (F12 -> Console)</p>
+
+    <div class="matrix">
+        <label class="cell-label"><input type="checkbox" data-x="0" data-y="0">0,0</label>
+        <label class="cell-label"><input type="checkbox" data-x="1" data-y="0">1,0</label>
+        <label class="cell-label"><input type="checkbox" data-x="2" data-y="0">2,0</label>
+        
+        <label class="cell-label"><input type="checkbox" data-x="0" data-y="1">0,1</label>
+        <label class="cell-label"><input type="checkbox" data-x="1" data-y="1">1,1</label>
+        <label class="cell-label"><input type="checkbox" data-x="2" data-y="1">2,1</label>
+        
+        <label class="cell-label"><input type="checkbox" data-x="0" data-y="2">0,2</label>
+        <label class="cell-label"><input type="checkbox" data-x="1" data-y="2">1,2</label>
+        <label class="cell-label"><input type="checkbox" data-x="2" data-y="2">2,2</label>
+    </div>
+
+    </div>        
+        <button id="btn" type="button" class="btn" >Start</button>
+    </div>
+    <script>
+        
+        let grid = [
+            [0, 0, 0],
+            [0, 0, 0],
+            [0, 0, 0]
+        ];
+
+        const routeX = []; 
+        const routeY = [];
+        
+        const checkboxes = document.querySelectorAll('.matrix input');
+
+        const btn = document.getElementById('btn');
+        let btn_status = false;
+
+        setInterval(() => {
+            if (btn.matches(':active')) {
+                btn_status = true;
+                console.log('Кнопка затиснута прямо зараз (ПК або телефон)!');
+            } else {
+                btn_status = false;
+                console.log('Кнопка відпущена');
+            }
+        }, 100);
+        
+        checkboxes.forEach(checkbox => {
+            checkbox.addEventListener('change', (event) => {
+                const x = parseInt(event.target.getAttribute('data-x'));
+                const y = parseInt(event.target.getAttribute('data-y'));
+
+                
+                grid[y][x] = event.target.checked ? 1 : 0;
+
+                console.clear();
+                console.log("Поточна матриця в JS:");
+                console.table(grid); 
+
+                
+                processRoute();
+            });
+        });
+
+      
+        function generateRoute(grid, startX, startY) {
+            let route = [];
+            let visited = new Set();
+            let queue = [[startX, startY]];
+
+            while (queue.length > 0) {
+                let [x, y] = queue.shift();
+                let key = `${x},${y}`;
+
+                if (visited.has(key) || !grid[y][x]) continue;
+
+                visited.add(key);
+                route.push({x, y});
+
+                
+                const directions = [[1,0], [0,1], [-1,0], [0,-1]];
+                for (let [dx, dy] of directions) {
+                    let nextX = x + dx;
+                    let nextY = y + dy;
+                    
+                 
+                    if (nextX >= 0 && nextX < grid[0].length && nextY >= 0 && nextY < grid.length){
+                        if (grid[nextY][nextX] && !visited.has(`${nextX},${nextY}`)) {
+                            queue.push([nextX, nextY]);
+                        }
+                    }
+                }
+            }
+            return route;
+        }
+
+        
+        function processRoute() {
+        let startPoint = null;
+
+        
+        for (let y = 0; y < 3; y++) {
+            for (let x = 0; x < 3; x++) {
+                if (grid[y][x] === 1) {
+                    startPoint = {x, y};
+                    break;
+                }
+            }
+            if (startPoint) break;
+        }
+
+        if (!startPoint) {
+            console.log("Маршрут порожній. Виберіть хоча б один чекбокс.");
+            
+            routeX = [];
+            routeY = [];
+            return;
+        }
+
+        
+        const finalRoute = generateRoute(grid, startPoint.x, startPoint.y);
+        
+        
+        routeX = finalRoute.map(point => point.x);
+        routeY = finalRoute.map(point => point.y);
+        
+
+        console.log("Сформований маршрут для робота:");
+        console.log(finalRoute);
+
+        const pathString = finalRoute.map(p => `(${p.x},${p.y})`).join(" -> ");
+        console.log("Траєкторія: " + pathString);
+        
+    
+        console.log("Масив X:", routeX); 
+        console.log("Масив Y:", routeY); 
+
+        
+    }
+
+
+
+    </script>
+</body>
+</html>
