@@ -1,0 +1,53 @@
+#include <WiFi.h>
+#include <WebServer.h>
+
+#include <Arduino.h>
+
+
+WebServer server(80);
+
+void handleRoot() {
+  String html = R"=====(
+
+
+
+
+  )=====";
+server.send(200, "text/html", html);
+}
+
+void connection(){
+  WiFi.mode(WIFI_AP);
+
+  uint8_t protocol_bitmap = WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G | WIFI_PROTOCOL_11N;
+  esp_wifi_set_protocol(WIFI_IF_AP, protocol_bitmap);
+  esp_wifi_set_bandwidth(WIFI_IF_AP, WIFI_BW_HT20); 
+  
+  #if defined(ESP_IDF_VERSION_MAJOR) && ESP_IDF_VERSION_MAJOR >= 4
+    esp_wifi_set_ps(WIFI_PS_NONE); 
+  #endif
+
+  WiFi.softAP("esp32", "20332077", 6, 0, 8);
+  Serial.println("AP live.");
+  
+  server.on("/", handleRoot);
+  server.on("/cmd", handleCommand);
+  server.on("/mode1", handleMode1);
+  server.on("/mode2", handleMode2);
+  
+  server.begin();
+  Serial.println("Web Server started on IP: 192.168.4.1");
+  u8x8.drawString(0, 3, "Web Server Live");
+  u8x8.drawString(0, 5, "IP: 192.168.4.1");
+}
+
+
+void setup() {
+  
+  connection();
+
+}
+
+void loop() {
+  server.handleClient(); 
+}
