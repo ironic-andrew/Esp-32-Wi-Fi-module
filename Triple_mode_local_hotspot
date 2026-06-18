@@ -774,7 +774,7 @@ void handleGetLiveValues() {
 }
 // ----------
 
-// --- Sencronize platform time with server --->
+// --- Synchronize platform time with server --->
 void handleSyncTime() {
   if (server.hasArg("epoch")) {
     long long epoch = server.arg("epoch").toInt();
