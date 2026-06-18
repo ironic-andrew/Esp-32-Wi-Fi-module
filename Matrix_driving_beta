@@ -2,19 +2,32 @@
 #include <WebServer.h>
 #include <Arduino.h>
 #include <esp_wifi.h>
+#include <U8g2lib.h>
 
+// ---- Variable ---->
 int robotX[9];
 int robotY[9];
 int routeSize = 0;
 bool mode = false;
+// --------------
 
+// ---- Device initializetion ---->
+U8X8_SH1106_128X64_NONAME_HW_I2C u8x8(/* reset=*/ -1, /* clock=*/ 9, /* data=*/ 8);
+// --------------
 
+// ---- Motors initializetion ---->
 const int8_t motors[4] = {38, 37, 40, 39};
+// --------------
 
+// ---- Server initializetion ---->
 WebServer server(80);
+// --------------
 
+// ---- Call back function ---->
 void send_route();
+// --------------
 
+// ---- HTML interface ---->
 void handleRoot() {
   String html = R"=====(
 <!DOCTYPE html>
@@ -34,23 +47,26 @@ void handleRoot() {
         h2 { color: #333; }
         .matrix {
             display: grid;
-            grid-template-columns: repeat(3, 60px);
+            grid-template-columns: repeat(3, 70px);
             grid-gap: 10px;
             margin-bottom: 20px;
         }
         .cell-label {
-            width: 60px;
-            height: 60px;
+            width: 70px;
+            height: 70px;
             background-color: #fff;
             border: 2px solid #ccc;
             border-radius: 8px;
             display: flex;
+            flex-direction: column;
             justify-content: center;
             align-items: center;
             cursor: pointer;
             font-weight: bold;
             user-select: none;
             transition: all 0.2s;
+            position: relative;
+            font-size: 14px;
         }
         .cell-label input {
             display: none;
@@ -60,41 +76,57 @@ void handleRoot() {
             color: white;
             border-color: #45a049;
         }
+        /* Номер кроку на кнопці */
+        .cell-label .step-num {
+            font-size: 11px;
+            color: #ffeb3b;
+            margin-top: 2px;
+        }
         .info {
             color: #666;
             font-size: 14px;
+            margin-bottom: 20px;
         }
-        .btn { background: #6c757d; color: #f8f9fa; border: 1px solid #6c757d; padding: 0.5rem 1.5rem; font-size: 1rem; border-radius: 0.375rem; cursor: pointer; transition: 0.15s; outline: none; }
-        .btn:active { background: #4CAF50; border-color: #45a049; }
+        .btn { 
+            background: #6c757d; 
+            color: #f8f9fa; 
+            border: 1px solid #6c757d; 
+            padding: 0.5rem 2rem; 
+            font-size: 1.2rem; 
+            border-radius: 0.375rem; 
+            cursor: pointer; 
+            transition: 0.15s; 
+            outline: none; 
+        }
+        .btn:active {
+            background-color: #45a049;
+        }
     </style>
 </head>
 <body>
 
     <h2>Інтерактивна матриця маршруту 3х3</h2>
-    <p class="info">Натискайте на клітинки та натисніть Start</p>
+    <p class="info">Натискайте клітинки ПОСЛІДОВНО, як має їхати робот</p>
 
     <div class="matrix">
-        <label class="cell-label"><input type="checkbox" data-x="0" data-y="0">0,0</label>
-        <label class="cell-label"><input type="checkbox" data-x="1" data-y="0">1,0</label>
-        <label class="cell-label"><input type="checkbox" data-x="2" data-y="0">2,0</label>
+        <label class="cell-label" id="cell-0-0"><input type="checkbox" data-x="0" data-y="0">0,0<span class="step-num"></span></label>
+        <label class="cell-label" id="cell-1-0"><input type="checkbox" data-x="1" data-y="0">1,0<span class="step-num"></span></label>
+        <label class="cell-label" id="cell-2-0"><input type="checkbox" data-x="2" data-y="0">2,0<span class="step-num"></span></label>
         
-        <label class="cell-label"><input type="checkbox" data-x="0" data-y="1">0,1</label>
-        <label class="cell-label"><input type="checkbox" data-x="1" data-y="1">1,1</label>
-        <label class="cell-label"><input type="checkbox" data-x="2" data-y="1">2,1</label>
+        <label class="cell-label" id="cell-0-1"><input type="checkbox" data-x="0" data-y="1">0,1<span class="step-num"></span></label>
+        <label class="cell-label" id="cell-1-1"><input type="checkbox" data-x="1" data-y="1">1,1<span class="step-num"></span></label>
+        <label class="cell-label" id="cell-2-1"><input type="checkbox" data-x="2" data-y="1">2,1<span class="step-num"></span></label>
         
-        <label class="cell-label"><input type="checkbox" data-x="0" data-y="2">0,2</label>
-        <label class="cell-label"><input type="checkbox" data-x="1" data-y="2">1,2</label>
-        <label class="cell-label"><input type="checkbox" data-x="2" data-y="2">2,2</label>
+        <label class="cell-label" id="cell-0-2"><input type="checkbox" data-x="0" data-y="2">0,2<span class="step-num"></span></label>
+        <label class="cell-label" id="cell-1-2"><input type="checkbox" data-x="1" data-y="2">1,2<span class="step-num"></span></label>
+        <label class="cell-label" id="cell-2-2"><input type="checkbox" data-x="2" data-y="2">2,2<span class="step-num"></span></label>
     </div>
        
     <button id="btn" type="button" class="btn">Start</button>
 
     <script>
-        let grid = [
-            [0, 0, 0],
-            [0, 0, 0],
-            [0, 0, 0]
-        ];
+        // Масив, який буде зберігати ТОЧНИЙ порядок твоїх кліків
+        let userPath = []; 
 
         let routeX = []; 
         let routeY = [];
@@ -102,85 +134,84 @@ void handleRoot() {
         const checkboxes = document.querySelectorAll('.matrix input');
         const btn = document.getElementById('btn');
 
-        
-        btn.addEventListener('mousedown', () => {
+        function handleBtnStart() {
             sendRouteToESP();
-        });
-        btn.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            sendRouteToESP();
+        }
+            
+        btn.addEventListener('mousedown', handleBtnStart);
+        btn.addEventListener('touchstart', (event) => {
+            event.preventDefault(); 
+            handleBtnStart();
         });
         
         checkboxes.forEach(checkbox => {
             checkbox.addEventListener('change', (event) => {
                 const x = parseInt(event.target.getAttribute('data-x'));
                 const y = parseInt(event.target.getAttribute('data-y'));
-                grid[y][x] = event.target.checked ? 1 : 0;
-                processRoute();
+
+                if (event.target.checked) {
+                    // Якщо чекбокс увімкнули — додаємо в кінець черги руху
+                    userPath.push({x, y});
+                } else {
+                    // Якщо чекбокс вимкнули — видаляємо його з будь-якого місця черги
+                    userPath = userPath.filter(point => !(point.x === x && point.y === y));
+                }
+
+                // Оновлюємо цифри кроків на екрані
+                updateStepLabels();
+                
+                // Переганяємо наш лінійний шлях у кінцеві масиви для відправки
+                routeX = userPath.map(p => p.x);
+                routeY = userPath.map(p => p.y);
+
+                console.clear();
+                console.log("Послідовний маршрут користувача:");
+                console.log(userPath.map(p => `(${p.x},${p.y})`).join(" -> "));
             });
         });
 
-        function generateRoute(grid, startX, startY) {
-            let route = [];
-            let visited = new Set();
-            let queue = [[startX, startY]];
-
-            while (queue.length > 0) {
-                let [x, y] = queue.shift();
-                let key = `${x},${y}`;
-
-                if (visited.has(key) || !grid[y][x]) continue;
-
-                visited.add(key);
-                route.push({x, y});
-
-                const directions = [[1,0], [0,1], [-1,0], [0,-1]];
-                for (let [dx, dy] of directions) {
-                    let nextX = x + dx;
-                    let nextY = y + dy;
-                    if (nextX >= 0 && nextX < grid[0].length && nextY >= 0 && nextY < grid.length){
-                        if (grid[nextY][nextX] && !visited.has(`${nextX},${nextY}`)) {
-                            queue.push([nextX, nextY]);
-                        }
-                    }
+        // Функція, яка малює номери кроків [Крок 1], [Крок 2]... на кнопках
+        function updateStepLabels() {
+            // Спочатку очищаємо всі написи
+            checkboxes.forEach(cb => {
+                cb.parentElement.querySelector('.step-num').innerText = "";
+            });
+            // Ставимо актуальні номери
+            userPath.forEach((point, index) => {
+                const label = document.querySelector(`.matrix input[data-x="${point.x}"][data-y="${point.y}"]`);
+                if (label) {
+                    label.parentElement.querySelector('.step-num').innerText = `[Крок ${index + 1}]`;
                 }
-            }
-            return route;
-        }
-
-        function processRoute() {
-            let startPoint = null;
-            for (let y = 0; y < 3; y++) {
-                for (let x = 0; x < 3; x++) {
-                    if (grid[y][x] === 1) {
-                        startPoint = {x, y};
-                        break;
-                    }
-                }
-                if (startPoint) break;
-            }
-
-            if (!startPoint) {
-                routeX = [];
-                routeY = [];
-                return;
-            }
-
-            const finalRoute = generateRoute(grid, startPoint.x, startPoint.y);
-            routeX = finalRoute.map(point => point.x);
-            routeY = finalRoute.map(point => point.y);
+            });
         }
 
         function sendRouteToESP() {
             if (routeX.length === 0) {
-                alert("Маршрут порожній!");
+                alert("Маршрут порожній! Виберіть клітинки.");
                 return;
             }
             const xStr = routeX.join(",");
             const yStr = routeY.join(",");
+
             const xhr = new XMLHttpRequest();
             xhr.open("GET", `/send_route?x=${xStr}&y=${yStr}`, true);
+            
+            xhr.onreadystatechange = function () {
+                if (xhr.readyState === 4 && xhr.status === 200) {
+                    console.log("ESP32 прийняв маршрут:", xhr.responseText);
+                    // Очищаємо вибір після успішної відправки (за бажанням)
+                    resetMatrix();
+                }
+            };
             xhr.send();
+        }
+
+        function resetMatrix() {
+            checkboxes.forEach(cb => cb.checked = false);
+            userPath = [];
+            routeX = [];
+            routeY = [];
+            updateStepLabels();
         }
     </script>
 </body>
@@ -188,7 +219,9 @@ void handleRoot() {
   )=====";
   server.send(200, "text/html", html);
 }
+// --------------
 
+// ---- Create localhot spot and get date from server ---->
 void connection(){
   WiFi.mode(WIFI_AP);
   uint8_t protocol_bitmap = WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G | WIFI_PROTOCOL_11N;
@@ -199,7 +232,7 @@ void connection(){
     esp_wifi_set_ps(WIFI_PS_NONE); 
   #endif
 
-  WiFi.softAP("esp32", "20332077", 6, 0, 8);
+  WiFi.softAP("esp32", "", 6, 0, 8);
   Serial.println("AP live.");
   
   server.on("/", handleRoot);
@@ -208,7 +241,9 @@ void connection(){
   server.begin();
   Serial.println("Web Server started on IP: 192.168.4.1");
 }
+// --------------
 
+// ---- Proccesing date from server ---->
 void send_route() {
   if (server.hasArg("x") && server.hasArg("y")) {
     String xRaw = server.arg("x"); 
@@ -241,90 +276,118 @@ void send_route() {
     server.send(400, "text/plain", "Missing arguments");
   }
 }
+// --------------
 
+// ---- Apply motors ---->
 void Motors(int moto1_forward, int moto1_backward, int moto2_forward, int moto2_backward){
   analogWrite(motors[0], moto1_forward);
   analogWrite(motors[1], moto1_backward);
   analogWrite(motors[2], moto2_forward);
   analogWrite(motors[3], moto2_backward);
 }
-
+// --------------
+  
+// ---- Proccesing drive ---->
+int current_dir = 0; 
 
 void road_drive(){
   if (routeSize < 2) {
     Serial.println("Замало точок для руху.");
     return;
   }
-
-  bool marker_left = false;
-  bool marker_right = false;  
   
+  //comment it if you want`t that robot have memmory
+  current_dir = 0; 
+
   for(int i = 0; i < routeSize - 1; i++) {
     int deltaX = robotX[i + 1] - robotX[i]; 
     int deltaY = robotY[i + 1] - robotY[i]; 
 
-    Serial.printf("Крок %d: Рух з (%d,%d) до (%d,%d) -> deltaX: %d, deltaY: %d\n", 
-                  i, robotX[i], robotY[i], robotX[i+1], robotY[i+1], deltaX, deltaY);
+    
+    int target_dir = current_dir; 
+    if (deltaY < 0)       target_dir = 0; // Вгору (-Y)
+    else if (deltaX > 0)  target_dir = 1; // Вправо (+X)
+    else if (deltaY > 0)  target_dir = 2; // Вниз (+Y)
+    else if (deltaX < 0)  target_dir = 3; // Вліво (-X)
 
-    if (deltaY < 0) {
+    Serial.printf("Крок %d: з (%d,%d) до (%d,%d) | Компас: %d -> Ціль: %d\n", 
+                  i, robotX[i], robotY[i], robotX[i+1], robotY[i+1], current_dir, target_dir);
+
+
+    int diff = (target_dir - current_dir + 4) % 4;
+    
+    
+    if (diff == 1) {  
+      Serial.println("-> Поворот направо на 90°");
+      u8x8.drawString(1, 5, "Turn RIGHT       ");
+      Motors(60, 0, 0, 60); 
+      delay(380);          
+      current_dir = target_dir; 
       
-      Serial.println("-> Рух ВПЕРЕД");
-      Motors(60, 0, 60, 0);
-      marker_right = false;
+      Motors(0, 0, 0, 0);   
+      delay(200);
     } 
-    else if (deltaY > 0) {
+    else if (diff == 3) {
+      Serial.println("-> Поворот наліво на 90°");
+      u8x8.drawString(1, 5, "Turn LEFT        ");
+      Motors(0, 60, 60, 0); 
+      delay(380);           
+      current_dir = target_dir;
       
-      Serial.println("-> Рух НАЗАД");
-      Motors(0, 60, 0, 60);
-      marker_left = false;
+      Motors(0, 0, 0, 0);
+      delay(200);
     } 
-    else if (deltaX > 0) {
-      if(marker_right){
-
-        Motors(60, 0, 60, 0);
-        Serial.println("-> Поворот НАПРАВО/ПРЯМО");
-
-      }else{
-
-        marker_right = true;
-        Serial.println("-> Поворот НАПРАВО");
-        Motors(60, 0, 0, 0); 
-
-      }
-    } 
-    else if (deltaX < 0) {
-      if(marker_left){
-
-        Motors(0, 60, 0, 60);
-        Serial.println("-> Поворот НАЛІВО/");
-
-      }else{
-
-        marker_left = true;
-        Serial.println("-> Поворот НАЛІВО");
-        Motors(0, 0, 60, 0);
-
-      }
+    else if (diff == 2) {
+      Serial.println("-> Розварот на 180°");
+      u8x8.drawString(1, 5, "Turn 180°        ");
+      Motors(60, 0, 0, 60); 
+      delay(680);           
+      current_dir = target_dir;
       
+      Motors(0, 0, 0, 0);
+      delay(200);
+    } 
+    else {
+      
+      u8x8.drawString(1, 5, "Go Straight     ");
     }
 
+    
+    Serial.println("-> Рух ВПЕРЕД у наступну клітинку");
+    Motors(60, 0, 60, 0); 
     delay(600); 
+    
+    
+    Motors(0, 0, 0, 0);
+    delay(200);
   }
 
-  
   Serial.println("Маршрут завершено. Зупинка.");
   Motors(0, 0, 0, 0);
+  u8x8.clear();
 }
+// --------------
 
+// ---- Setup ---->
 void setup() {
   Serial.begin(115200);
   
+  // --- Display initializetion --->
+  u8x8.begin();
+  u8x8.setFlipMode(1);
+  u8x8.setPowerSave(0); 
+  u8x8.setFont(u8x8_font_chroma48medium8_r);
+  u8x8.clear();
+  // ------------
+
   for(int i = 0; i < 4; i++) {
     pinMode(motors[i], OUTPUT);
   }
   connection();
 }
+// --------------
 
+// ---- Loop ---->
 void loop() {
   server.handleClient(); 
 
@@ -333,3 +396,4 @@ void loop() {
     road_drive();
   }
 }
+// --------------
