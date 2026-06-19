@@ -125,7 +125,7 @@ void handleRoot() {
     <button id="btn" type="button" class="btn">Start</button>
 
     <script>
-        // Масив, який буде зберігати ТОЧНИЙ порядок твоїх кліків
+        
         let userPath = []; 
 
         let routeX = []; 
@@ -150,17 +150,17 @@ void handleRoot() {
                 const y = parseInt(event.target.getAttribute('data-y'));
 
                 if (event.target.checked) {
-                    // Якщо чекбокс увімкнули — додаємо в кінець черги руху
+                    
                     userPath.push({x, y});
                 } else {
-                    // Якщо чекбокс вимкнули — видаляємо його з будь-якого місця черги
+                    
                     userPath = userPath.filter(point => !(point.x === x && point.y === y));
                 }
 
-                // Оновлюємо цифри кроків на екрані
+                
                 updateStepLabels();
                 
-                // Переганяємо наш лінійний шлях у кінцеві масиви для відправки
+                
                 routeX = userPath.map(p => p.x);
                 routeY = userPath.map(p => p.y);
 
@@ -170,13 +170,13 @@ void handleRoot() {
             });
         });
 
-        // Функція, яка малює номери кроків [Крок 1], [Крок 2]... на кнопках
+        
         function updateStepLabels() {
-            // Спочатку очищаємо всі написи
+            
             checkboxes.forEach(cb => {
                 cb.parentElement.querySelector('.step-num').innerText = "";
             });
-            // Ставимо актуальні номери
+            
             userPath.forEach((point, index) => {
                 const label = document.querySelector(`.matrix input[data-x="${point.x}"][data-y="${point.y}"]`);
                 if (label) {
@@ -199,7 +199,7 @@ void handleRoot() {
             xhr.onreadystatechange = function () {
                 if (xhr.readyState === 4 && xhr.status === 200) {
                     console.log("ESP32 прийняв маршрут:", xhr.responseText);
-                    // Очищаємо вибір після успішної відправки (за бажанням)
+                    
                     resetMatrix();
                 }
             };
@@ -319,7 +319,7 @@ void road_drive(){
     
     if (diff == 1) {  
       Serial.println("-> Поворот направо на 90°");
-      u8x8.drawString(1, 5, "Turn RIGHT       ");
+      //u8x8.drawString(1, 5, "Turn RIGHT       ");
       Motors(60, 0, 0, 60); 
       delay(380);          
       current_dir = target_dir; 
@@ -329,7 +329,7 @@ void road_drive(){
     } 
     else if (diff == 3) {
       Serial.println("-> Поворот наліво на 90°");
-      u8x8.drawString(1, 5, "Turn LEFT        ");
+      //u8x8.drawString(1, 5, "Turn LEFT        ");
       Motors(0, 60, 60, 0); 
       delay(380);           
       current_dir = target_dir;
@@ -339,7 +339,7 @@ void road_drive(){
     } 
     else if (diff == 2) {
       Serial.println("-> Розварот на 180°");
-      u8x8.drawString(1, 5, "Turn 180°        ");
+      //u8x8.drawString(1, 5, "Turn 180°        ");
       Motors(60, 0, 0, 60); 
       delay(680);           
       current_dir = target_dir;
@@ -349,7 +349,7 @@ void road_drive(){
     } 
     else {
       
-      u8x8.drawString(1, 5, "Go Straight     ");
+      //u8x8.drawString(1, 5, "Go Straight     ");
     }
 
     
@@ -384,6 +384,11 @@ void setup() {
     pinMode(motors[i], OUTPUT);
   }
   connection();
+
+  u8x8.clear();
+  u8x8.drawString(1,2, "Ready to work!");
+  u8x8.drawString(1,4, "IP: 192.168.4.1");
+
 }
 // --------------
 
