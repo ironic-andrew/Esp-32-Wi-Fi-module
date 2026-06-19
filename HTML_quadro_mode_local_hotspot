@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Robot Control & Telemetry</title>
+    <style>
+        body { background-color: #212529; color: #f8f9fa; font-family: system-ui, sans-serif; margin: 0; padding: 0; overflow-x: hidden; user-select: none; -webkit-user-select: none; transition: background 0.3s; }
+        .vh-100 { min-height: 100vh; display: flex; justify-content: center; align-items: center; position: relative; padding: 60px 10px 20px 10px; box-sizing: border-box; }
+        .top-bar { position: absolute; top: 0; left: 0; padding: 1rem; display: flex; gap: 0.5rem; z-index: 20; flex-wrap: wrap; }
+        .btn { background: transparent; color: #f8f9fa; border: 1px solid #6c757d; padding: 0.375rem 0.75rem; font-size: 1rem; border-radius: 0.375rem; cursor: pointer; transition: 0.15s; outline: none; opacity: 0.5; }
+        .btn:active { opacity: 1; }
+        .active-mode { background: #7f8183 !important; opacity: 1 !important; }
+        .container { width: 25%; min-width: 200px; max-width: 450px; display: flex; flex-direction: column; gap: 0.5rem; }
+        .row { display: flex; width: 100%; }
+        .justify-content-center { justify-content: center; }
+        .col-4 { width: 33.3333%; padding: 0 0.25rem; box-sizing: border-box; }
+        .btn-wasd { width: 100%; padding-top: 1.5rem; padding-bottom: 1.5rem; font-size: 2.5rem; display: flex; align-items: center; justify-content: center; }
+        #mode2_text { position: absolute; top: 0; left: 0; width: 100%; height: 100vh; display: none; justify-content: center; align-items: center; font-size: 2rem; color: #dad5d5; pointer-events: none; z-index: 5; background-color: rgba(33, 37, 41, 0.9); text-align: center; }
+        
+        /* --- Стилі для Mode 3 (Телеметрія) --- */
+        #telemetry_panel { display: none; width: 100%; max-width: 500px; background: #2c3034; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); margin: auto; text-align: center; box-sizing: border-box; }
+        h1 { color: #f8f9fa; font-size: 1.5rem; margin-top: 0; margin-bottom: 20px; }
+        .data-title { font-size: 0.8rem; color: #a8aeb4; text-transform: uppercase; margin-top: 12px; margin-bottom: 4px; text-align: left; padding-left: 5px; }
+        .data-box { font-size: 1.4rem; color: #399cff; font-weight: bold; margin-bottom: 10px; background: #1f2327; padding: 8px; border-radius: 6px; }
+        .sensor-box { font-size: 1.4rem; font-weight: bold; padding: 10px; border-radius: 8px; transition: background 0.3s, color 0.3s; text-align: center; border: 1px solid transparent; }
+        
+        .normal-box { background: #1e3a24; color: #52be6f; border-color: #28a745; }
+        .laser-box { background: #3a1e2d; color: #f268a3; border-color: #e83e8c; }
+        .stable-gyro { background: #2b3035; color: #dee2e6; border-color: #495057; }
+        .accel-box { background: #1a2e4c; color: #5ca1f1; border-color: #0056b3; font-size: 1.2rem; }
+        .compas-box { background: #3d1a1a; color: #ff6b6b; border-color: #640000; font-size: 1.2rem; }
+        .infra_red-box { background: #33361a; color: #d4e157; border-color: #293500; font-size: 1.0rem; }
+        .barometer-box { background: #38371a; color: #ffee55; border-color: #464400; font-size: 1.2rem; }
+        .orientation_bno-box { background: #3a2617; color: #ffa726; border-color: #3a1f00; font-size: 1.2rem; }
+        .accelerometer_bno-box { background: #173636; color: #26c6da; border-color: #003e42; font-size: 1.2rem; }
+        .magnetometer_bno-box { background: #351a2e; color: #ba68c8; border-color: #350023; font-size: 1.2rem; }
+        .alert-gyro { background: #dc3545; color: white; border-color: #ff6b6b; animation: blinker 1s linear infinite; }
+        @keyframes blinker { 50% { opacity: 0.7; } }
+
+        .control-panel { background: #1f2327; padding: 10px; border-radius: 8px; margin-bottom: 15px; display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; border: 1px solid #343a40; }
+        .control-panel label { font-size: 0.75rem; font-weight: bold; color: #c2c7d0; cursor: pointer; display: flex; align-items: center; gap: 4px; background: #2c3034; padding: 4px 8px; border-radius: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+        .sensor-container { transition: all 0.3s ease; }
+
+        /* --- Стилі для Mode 4 (Матриця маршруту) --- */
+        #matrix_panel { display: none; flex-direction: column; align-items: center; background: #2c3034; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); margin: auto; box-sizing: border-box; }
+        .matrix { display: grid; grid-template-columns: repeat(6, 50px); grid-gap: 6px; margin-bottom: 20px; }
+        .cell-label { width: 50px; height: 50px; background-color: #1f2327; border: 2px solid #495057; border-radius: 8px; display: flex; flex-direction: column; justify-content: center; align-items: center; cursor: pointer; font-weight: bold; user-select: none; transition: all 0.2s; position: relative; font-size: 11px; color: #dee2e6; }
+        .cell-label input { display: none; }
+        .cell-label:has(input:checked) { background-color: #1e3a24; color: #52be6f; border-color: #28a745; }
+        .cell-label .step-num { font-size: 8px; color: #ffee55; margin-top: 1px; }
+        .info { color: #a8aeb4; font-size: 0.9rem; margin-bottom: 15px; text-align: center; }
+        .btn-matrix-start { background: #1a2e4c; color: #5ca1f1; border: 1px solid #0056b3; padding: 0.5rem 2rem; font-size: 1.2rem; border-radius: 0.375rem; cursor: pointer; transition: 0.15s; outline: none; width: 100%; max-width: 200px; }
+        .btn-matrix-start:active { background-color: #003e42; }
+    </style>
+</head>
+<body>
+    <div class="vh-100">
+        <div class="top-bar">
+            <button id="btn1" type="button" class="btn active-mode" onclick="changeMode(1)">Mode 1</button>
+            <button id="btn2" type="button" class="btn" onclick="changeMode(2)">Mode 2</button>
+            <button id="btn3" type="button" class="btn" onclick="changeMode(3)">Mode 3</button>
+            <button id="btn4" type="button" class="btn" onclick="changeMode(4)">Mode 4</button>
+        </div>
+        
+        <div id="mode2_text" style="text-shadow: 0px 4px 15px rgba(0, 0, 0, 0.75);">
+            <p style="margin: 20px;">Mode 2 Active</p>
+        </div>
+        
+        <div class="container" id="wasd_pad">
+            <div class="row" style="margin-bottom: 0.5rem;">
+                <div class="col-4"></div>        
+                <div class="col-4">
+                    <button id="W" type="button" class="btn btn-wasd" 
+                            ontouchstart="handleTouch('W', true)" 
+                            ontouchend="handleTouch('W', false)">W</button>
+                </div>
+                <div class="col-4"></div>
+            </div>
+            <div class="row">
+                <div class="col-4">
+                    <button id="A" type="button" class="btn btn-wasd" 
+                            ontouchstart="handleTouch('A', true)" 
+                            ontouchend="handleTouch('A', false)">A</button>
+                </div>
+                <div class="col-4">
+                    <button id="S" type="button" class="btn btn-wasd" 
+                            ontouchstart="handleTouch('S', true)" 
+                            ontouchend="handleTouch('S', false)">S</button>
+                </div>
+                <div class="col-4">
+                    <button id="D" type="button" class="btn btn-wasd" 
+                            ontouchstart="handleTouch('D', true)" 
+                            ontouchend="handleTouch('D', false)">D</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="telemetry_panel">
+            <h1>ESP32 Telemetry</h1>
+
+            <div class="control-panel">
+                <label><input type="checkbox" checked onclick="toggleSensor('container-hc', this)"> HC-SR04</label>
+                <label><input type="checkbox" checked onclick="toggleSensor('container-laser', this)"> VL53L0X</label>
+                <label><input type="checkbox" checked onclick="toggleSensor('container-gir', this)"> Orientation</label>
+                <label><input type="checkbox" checked onclick="toggleSensor('container-acc', this)"> Accelerometer</label>
+                <label><input type="checkbox" checked onclick="toggleSensor('container-com', this)"> Compas</label>
+                <label><input type="checkbox" checked onclick="toggleSensor('container-inf', this)"> Infra red</label>
+                <label><input type="checkbox" checked onclick="toggleSensor('container-bar', this)"> Barometer</label>
+                <label><input type="checkbox" checked onclick="toggleSensor('container-ori', this)"> Orientation bno</label>
+                <label><input type="checkbox" checked onclick="toggleSensor('container-acc_bno', this)"> Accelerometer bno</label>
+                <label><input type="checkbox" checked onclick="toggleSensor('container-mag', this)"> Magnetometer</label>
+            </div>
+            
+            <div class="sensor-container" id="container-hc">
+                <div class="data-title">HC-SR04 Distance</div>
+                <div class="sensor-box normal-box" id="distance-hc">%DISTANCE_HC% cm</div>
+            </div>
+
+            <div class="sensor-container" id="container-laser">
+                <div class="data-title">VL53L0X Laser Distance</div>
+                <div class="sensor-box laser-box" id="distance-laser">%DISTANCE_GY% cm</div>
+            </div>
+            
+            <div class="sensor-container" id="container-gir">
+                <div class="data-title">Orientation / Collision Status</div>
+                <div class="sensor-box stable-gyro" id="gyro-status">%GIROSCOPE%</div>
+            </div>
+
+            <div class="sensor-container" id="container-acc">
+                <div class="data-title">Accelerometer (Raw G's)</div>
+                <div class="sensor-box accel-box" id="accelerometer">%ACCELEROMETER%</div>
+            </div>
+
+            <div class="sensor-container" id="container-com">
+                <div class="data-title">Compas</div>
+                <div class="sensor-box compas-box" id="compas">%COMPAS%</div>
+            </div>
+            
+            <div class="sensor-container" id="container-inf">
+                <div class="data-title">Infra red sensors</div>
+                <div class="sensor-box infra_red-box" id="infra_red">%INFRA_RED%</div>
+            </div> 
+
+            <div class="sensor-container" id="container-bar">
+                <div class="data-title">Barometer</div>
+                <div class="sensor-box barometer-box" id="barometer">%BAROMETER%</div>
+            </div>
+
+            <div class="sensor-container" id="container-ori">
+                <div class="data-title">Orientation use bno</div>
+                <div class="sensor-box orientation_bno-box" id="orientation_bno">%ORIENTATION_BNO%</div>
+            </div>
+
+            <div class="sensor-container" id="container-acc_bno">
+                <div class="data-title">Accelerometer use bno</div>
+                <div class="sensor-box accelerometer_bno-box" id="accelerometer_bno">%ACCELEROMETER_BNO%</div>
+            </div>
+
+            <div class="sensor-container" id="container-mag">
+                <div class="data-title">Magnetometer use bno</div>
+                <div class="sensor-box magnetometer_bno-box" id="magnetometer_bno">%MAGNETOMETER_BNO%</div>
+            </div>
+            
+            <div class="data-title">System Date & Time</div>
+            <div class="data-box" id="time-value">%LIVE_DATE%</div>
+        </div>
+
+        <div id="matrix_panel">
+            <h1>Маршрут роботи 6х6</h1>
+            <p class="info">Натискайте клітинки ПОСЛІДОВНО</p>
+            <div class="matrix" id="matrix"></div>
+            <button id="matrix_start_btn" type="button" class="btn-matrix-start">Start</button>
+        </div>
+    </div>
+
+<script>
+let marker_a = false, marker_w = false, marker_s = false, marker_d = false;
+
+    const button_a = document.getElementById("A"), button_w = document.getElementById("W"), button_s = document.getElementById("S"), button_d = document.getElementById("D");
+
+    const mode2_text = document.getElementById("mode2_text");
+    const wasd_pad = document.getElementById("wasd_pad");
+    const telemetry_panel = document.getElementById("telemetry_panel");
+    const matrix_panel = document.getElementById("matrix_panel");
+    const btn1 = document.getElementById("btn1"), btn2 = document.getElementById("btn2"), btn3 = document.getElementById("btn3"), btn4 = document.getElementById("btn4");
+
+    let currentMode = 1;
+    let telemetryInterval = null;
+
+    let lastSentDirection = "stop";
+
+    // --- ГЕНЕРАЦІЯ МАТРИЦІ 6х6 ---
+    const matrixContainer = document.getElementById('matrix');
+    const MATRIX_SIZE = 6;
+    let userPath = []; 
+    let routeX = []; 
+    let routeY = [];
+
+    for (let y = 0; y < MATRIX_SIZE; y++) {
+        for (let x = 0; x < MATRIX_SIZE; x++) {
+            const label = document.createElement('label');
+            label.className = 'cell-label';
+            label.id = `cell-${x}-${y}`;
+            label.innerHTML = `
+                <input type="checkbox" data-x="${x}" data-y="${y}">
+                ${x},${y}
+                <span class="step-num"></span>
+            `;
+            matrixContainer.appendChild(label);
+        }
+    }
+
+    const checkboxes = document.querySelectorAll('.matrix input');
+    const matrixStartBtn = document.getElementById('matrix_start_btn');
+
+    matrixStartBtn.addEventListener('mousedown', sendRouteToESP);
+    matrixStartBtn.addEventListener('touchstart', (event) => {
+        event.preventDefault(); 
+        sendRouteToESP();
+    });
+
+    checkboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', (event) => {
+            const x = parseInt(event.target.getAttribute('data-x'));
+            const y = parseInt(event.target.getAttribute('data-y'));
+
+            if (event.target.checked) {
+                userPath.push({x, y});
+            } else {
+                userPath = userPath.filter(point => !(point.x === x && point.y === y));
+            }
+
+            updateStepLabels();
+            routeX = userPath.map(p => p.x);
+            routeY = userPath.map(p => p.y);
+        });
+    });
+
+    function updateStepLabels() {
+        checkboxes.forEach(cb => {
+            cb.parentElement.querySelector('.step-num').innerText = "";
+        });
+        userPath.forEach((point, index) => {
+            const label = document.querySelector(`.matrix input[data-x="${point.x}"][data-y="${point.y}"]`);
+            if (label) {
+                label.parentElement.querySelector('.step-num').innerText = `[Кр. ${index + 1}]`;
+            }
+        });
+    }
+
+    function sendRouteToESP() {
+        if (routeX.length === 0) {
+            alert("Маршрут порожній! Виберіть клітинки.");
+            return;
+        }
+        const xStr = routeX.join(",");
+        const yStr = routeY.join(",");
+        sendHttpRequest(`/send_route?x=${xStr}&y=${yStr}`);
+        resetMatrix();
+    }
+
+    function resetMatrix() {
+        checkboxes.forEach(cb => cb.checked = false);
+        userPath = [];
+        routeX = [];
+        routeY = [];
+        updateStepLabels();
+    }
+    // ---------------------------------
+
+    function sendHttpRequest(url) { 
+        fetch(url)
+        .then(res => {
+            if(url.includes('send_route') && res.ok) console.log("ESP32 прийняв маршрут");
+        })
+        .catch(err => console.log("Помилка відправки запиту:", err)); 
+    }
+
+    function handleTouch(key, isPressed) {
+        if (typeof event !== 'undefined') event.preventDefault(); 
+        if (currentMode !== 1) return; 
+
+        let btn = document.getElementById(key);
+        
+        if (isPressed) {
+            if(btn) { btn.style.background = "#7f8183"; btn.style.opacity = "1"; }
+            if (key === 'W') marker_w = true;
+            if (key === 'S') marker_s = true;
+            if (key === 'A') marker_a = true;
+            if (key === 'D') marker_d = true;
+        } else {
+            if(btn) { btn.style.background = "transparent"; btn.style.opacity = "0.5"; }
+            if (key === 'W') marker_w = false;
+            if (key === 'S') marker_s = false;
+            if (key === 'A') marker_a = false;
+            if (key === 'D') marker_d = false;
+        }
+
+        sendSignal();
+    }
+
+    function changeMode(modeNum) {
+        currentMode = modeNum;
+        
+        btn1.classList.remove("active-mode");
+        btn2.classList.remove("active-mode");
+        btn3.classList.remove("active-mode");
+        btn4.classList.remove("active-mode");
+
+        if (telemetryInterval) {
+            clearInterval(telemetryInterval);
+            telemetryInterval = null;
+        }
+        document.body.style.background = "#212529";
+
+        wasd_pad.style.display = "none";
+        mode2_text.style.display = "none";
+        telemetry_panel.style.display = "none";
+        matrix_panel.style.display = "none";
+
+        
+        lastSentDirection = "stop";
+        marker_w = marker_s = marker_a = marker_d = false;
+        if(button_w) { button_w.style.background = "transparent"; button_w.style.opacity = "0.5"; }
+        if(button_s) { button_s.style.background = "transparent"; button_s.style.opacity = "0.5"; }
+        if(button_a) { button_a.style.background = "transparent"; button_a.style.opacity = "0.5"; }
+        if(button_d) { button_d.style.background = "transparent"; button_d.style.opacity = "0.5"; }
+
+        if (currentMode === 1) {
+            btn1.classList.add("active-mode");
+            wasd_pad.style.display = "flex";
+            sendHttpRequest('/mode1');
+        } else if (currentMode === 2) {
+            btn2.classList.add("active-mode");
+            mode2_text.style.display = "flex";
+            sendHttpRequest('/mode2');
+        } else if (currentMode === 3) {
+            btn3.classList.add("active-mode");
+            telemetry_panel.style.display = "block";
+            sendHttpRequest('/mode3');
+            let epochTime = Math.floor(Date.now() / 1000);
+            fetch('/sync-time?epoch=' + epochTime).catch(e => console.log(e));
+            startTelemetry();
+        } else if (currentMode === 4) {
+            btn4.classList.add("active-mode");
+            matrix_panel.style.display = "flex";
+            sendHttpRequest('/mode4'); 
+        }
+    }
+
+    function sendSignal() {
+        if (currentMode !== 1) return;
+        
+        let currentDir = "stop";
+
+        if(marker_w && marker_a) currentDir = 'forward_left';
+        else if(marker_w && marker_d) currentDir = 'forward_right';
+        else if(marker_s && marker_a) currentDir = 'backward_left';
+        else if(marker_s && marker_d) currentDir = 'backward_right';
+        else if(marker_w) currentDir = 'forward';
+        else if(marker_s) currentDir = 'backward';
+        else if(marker_a) currentDir = 'left';
+        else if(marker_d) currentDir = 'right';
+
+        // Відправляємо HTTP запит тільки тоді, коли напрямок реально ЗМІНИВСЯ
+        if (currentDir !== lastSentDirection) {
+            lastSentDirection = currentDir;
+            sendHttpRequest('/cmd?dir=' + currentDir);
+        }
+    }
+
+    document.addEventListener("keydown", function(event) {
+        if (event.repeat) return; // КРИТИЧНО: ігнорує спам-події від затиснутої клавіші!
+
+        let changed = false;
+        if(currentMode === 1) {
+            if(event.code === "KeyW" && !marker_w){ marker_w = true; if(button_w){button_w.style.background = "#7f8183"; button_w.style.opacity = "1";} event.preventDefault(); changed = true; }
+            if(event.code === "KeyS" && !marker_s){ marker_s = true; if(button_s){button_s.style.background = "#7f8183"; button_s.style.opacity = "1";} event.preventDefault(); changed = true; }
+            if(event.code === "KeyA" && !marker_a){ marker_a = true; if(button_a){button_a.style.background = "#7f8183"; button_a.style.opacity = "1";} event.preventDefault(); changed = true; }
+            if(event.code === "KeyD" && !marker_d){ marker_d = true; if(button_d){button_d.style.background = "#7f8183"; button_d.style.opacity = "1";} event.preventDefault(); changed = true; }
+            if(changed) sendSignal();
+        }
+        if(event.code === "Digit1"){ event.preventDefault(); changeMode(1); }
+        else if(event.code === "Digit2"){ event.preventDefault(); changeMode(2); }
+        else if(event.code === "Digit3"){ event.preventDefault(); changeMode(3); }
+        else if(event.code === "Digit4"){ event.preventDefault(); changeMode(4); }
+    });
+
+    document.addEventListener("keyup", function(event) {
+        let changed = false; 
+        if(currentMode === 1) { // Додано перевірку режиму для безпеки
+            if(event.code === "KeyW"){ marker_w = false; if(button_w){button_w.style.background = "transparent"; button_w.style.opacity = "0.5"} changed = true; }
+            if(event.code === "KeyS"){ marker_s = false; if(button_s){button_s.style.background = "transparent"; button_s.style.opacity = "0.5"} changed = true; }
+            if(event.code === "KeyA"){ marker_a = false; if(button_a){button_a.style.background = "transparent"; button_a.style.opacity = "0.5"} changed = true; }
+            if(event.code === "KeyD"){ marker_d = false; if(button_d){button_d.style.background = "transparent"; button_d.style.opacity = "0.5"} changed = true; }
+            if(changed) sendSignal();
+        }
+    });
+
+    function toggleSensor(containerId, checkbox) {
+        let container = document.getElementById(containerId);
+        if (container) {
+            container.style.display = checkbox.checked ? 'block' : 'none';
+        }
+    }
+
+    function startTelemetry() {
+        telemetryInterval = setInterval(function() {
+            if (currentMode !== 3) return;
+            
+            fetch('/api/data')
+            .then(response => response.json())
+            .then(data => {
+                let hcElem = document.getElementById('distance-hc');
+                if (hcElem) hcElem.innerText = data.distance_hc + (data.distance_hc == "Out of Range" ? "" : " cm");
+                
+                let laserElem = document.getElementById('distance-laser');
+                if (laserElem) laserElem.innerText = data.distance_laser + (data.distance_laser == "Out of Range" ? "" : " cm");
+
+                let accElem = document.getElementById('accelerometer');
+                if (accElem) accElem.innerText = data.accelerometer;
+
+                let comElem = document.getElementById('compas');
+                if (comElem) comElem.innerText = data.compas;
+
+                let infElem = document.getElementById('infra_red');
+                if (infElem) infElem.innerText = data.infra_red;
+
+                let barElem = document.getElementById('barometer');
+                if (barElem) barElem.innerText = data.barometer;
+
+                let oriElem = document.getElementById('orientation_bno');
+                if (oriElem) oriElem.innerText = data.orientation_bno;
+
+                let acc_bno_Elem = document.getElementById('accelerometer_bno');
+                if (acc_bno_Elem) acc_bno_Elem.innerText = data.accelerometer_bno;
+
+                let magElem = document.getElementById('magnetometer_bno');
+                if (magElem) magElem.innerText = data.magnetometer_bno;
+
+                let timeElem = document.getElementById('time-value');
+                if (timeElem) timeElem.innerText = data.datetime;
+                
+                let gyroElement = document.getElementById('gyro-status');
+                if (gyroElement) {
+                    gyroElement.innerText = data.position;
+                    if (data.position && data.position.includes("Collision")) {
+                        gyroElement.className = "sensor-box alert-gyro";
+                        document.body.style.background = "#4a1c24"; 
+                    } else {
+                        gyroElement.className = "sensor-box stable-gyro";
+                        document.body.style.background = "#212529";
+                    }
+                }
+            })
+            .catch(err => console.log("Помилка отримання телеметрії:", err));
+        }, 1000);
+    }
+</script>
+</body>
+</html>
+
+```
